@@ -160,30 +160,29 @@ sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ---
 
-## 5. iLink Bot API (WeChat)
+## 5. WeChat (wechatbot SDK)
 
 ```
-ILINK_API_KEY=
-ILINK_API_URL=https://api.ilink.dev
-ILINK_WEBHOOK_SECRET=
+# Ключей нет — авторизация через QR-код!
 ```
 
-**Шаг 1.** Зайдите на https://wechatbot.dev (официальный сайт iLink Bot API).
+**WeChat работает через SDK `@wechatbot/wechatbot` — никаких API-ключей не нужно.**
 
-**Шаг 2.** Нажмите **Get Started** / **Sign Up**, создайте аккаунт.
+Авторизация происходит так:
+1. В веб-админке нажмите **Администрирование → Поставщики → Добавить поставщика**
+2. Введите имя поставщика и его профильные марки
+3. Система запустит бота и покажет **QR-код** (ссылку на изображение)
+4. Поставщик сканирует QR-код в WeChat
+5. После сканирования бот автоматически начинает принимать сообщения
+6. Сессия сохраняется в файл `~/.wechatbot/<supplierId>.json` и восстанавливается при перезапуске
 
-**Шаг 3.** После входа перейдите в **Dashboard → API Keys**.
+**Как работает под капотом:**
+- SDK использует iLink Bot API (протокол WeChat)
+- Авторизация — QR-код → токен сохраняется локально
+- Сообщения получаются через **long-polling** (не webhook)
+- Каждый поставщик = отдельный экземпляр бота со своим файлом сессии
 
-**Шаг 4.** Нажмите **Generate API Key**. Скопируйте ключ — это `ILINK_API_KEY`.
-
-**Шаг 5.** Перейдите в **Dashboard → Webhooks**:
-- Укажите URL: `https://ВАШ_ДОМЕН/api/wechat/webhook`
-- Система выдаст **Webhook Secret** — это `ILINK_WEBHOOK_SECRET`
-
-**Шаг 6.** `ILINK_API_URL` оставьте как есть: `https://api.ilink.dev`
-
-**Подключение поставщика WeChat:**
-После настройки ключей зайдите в веб-админку → **Администрирование → Поставщики → Добавить поставщика**. Система сгенерирует QR-код, который поставщик сканирует в WeChat.
+> Документация SDK: https://www.wechatbot.dev/en/nodejs
 
 ---
 
@@ -206,6 +205,7 @@ NEXT_PUBLIC_APP_URL=
 После получения всех ключей ваш `.env.local` должен выглядеть так:
 
 ```env
+```env
 # Supabase (Self-Hosted)
 NEXT_PUBLIC_SUPABASE_URL=https://supabase.ваш-сервер.ru
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
@@ -219,13 +219,11 @@ TELEGRAM_WEBHOOK_SECRET=a3f8c2d1e4b5f6a7b8c9d0e1f2a3b4c5
 DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 
-# iLink Bot API (WeChat)
-ILINK_API_KEY=ilink_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-ILINK_API_URL=https://api.ilink.dev
-ILINK_WEBHOOK_SECRET=b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9
+# WeChat — ключей нет, авторизация через QR в админке
 
 # App
 NEXT_PUBLIC_APP_URL=https://zapchasti.timeweb.app
+```
 ```
 
 ---
@@ -237,7 +235,7 @@ NEXT_PUBLIC_APP_URL=https://zapchasti.timeweb.app
 - [ ] Telegram бот создан через @BotFather
 - [ ] Webhook зарегистрирован через `setWebhook`
 - [ ] DeepSeek аккаунт пополнен
-- [ ] iLink аккаунт создан, webhook настроен
+- [ ] Первый поставщик подключён через QR в админке (WeChat SDK, ключи не нужны)
 - [ ] `.env.local` заполнен реальными значениями
 - [ ] Приложение задеплоено на Timeweb
 - [ ] Первый поставщик подключён через QR в админке

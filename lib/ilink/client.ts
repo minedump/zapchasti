@@ -1,5 +1,14 @@
-// iLink Bot API Client
-// Docs: https://wechatbot.dev
+/**
+ * DEPRECATED — этот файл больше не используется.
+ *
+ * WeChat интеграция работает через Node.js SDK @wechatbot/wechatbot
+ * (long-polling, QR-авторизация без API-ключей).
+ *
+ * Используй: lib/wechat/manager.ts
+ * Docs: https://www.wechatbot.dev/en/nodejs
+ */
+
+// iLink Bot API Client — LEGACY, not used
 
 const ILINK_API_URL = process.env.ILINK_API_URL || 'https://api.ilink.dev';
 const ILINK_API_KEY = process.env.ILINK_API_KEY || '';

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { sendTextMessage, sendMediaMessage } from '@/lib/ilink/client';
+import { sendToWeChat, sendMediaToWeChat } from '@/lib/wechat/manager';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   const supabase = createClient();
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
 
   const serviceSupabase = createServiceClient();
 
-  // Get chat and supplier session
+  // Get chat external_id (WeChat user ID) and supplier
   const { data: chat } = await serviceSupabase
     .from('chats')
     .select('external_id')
@@ -31,27 +32,22 @@ export async function POST(req: NextRequest) {
 
   const { data: supplier } = await serviceSupabase
     .from('suppliers')
-    .select('session_id')
+    .select('id')
     .eq('chat_id', chatId)
     .single();
 
-  if (!supplier?.session_id) {
-    return NextResponse.json({ error: 'No active session for this supplier' }, { status: 400 });
+  if (!supplier) {
+    return NextResponse.json({ error: 'No supplier linked to this chat' }, { status: 400 });
   }
 
-  if (mediaUrl) {
-    await sendMediaMessage({
-      sessionId: supplier.session_id,
-      to: chat.external_id,
-      mediaUrl,
-      caption: content,
-    });
-  } else {
-    await sendTextMessage({
-      sessionId: supplier.session_id,
-      to: chat.external_id,
-      text: content,
-    });
+  try {
+    if (mediaUrl) {
+      await sendMediaToWeChat(supplier.id, chat.external_id, mediaUrl, content);
+    } else {
+      await sendToWeChat(supplier.id, chat.external_id, content);
+    }
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 503 });
   }
 
   await serviceSupabase.from('messages').insert({
