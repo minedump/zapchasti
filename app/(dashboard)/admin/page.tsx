@@ -227,8 +227,6 @@ function SuppliersTab() {
           </div>
         </div>
       )}
-        </div>
-      )}
 
       {/* Suppliers list */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
