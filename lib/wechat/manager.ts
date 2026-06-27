@@ -87,8 +87,12 @@ export async function startSupplierBot(
       storageDir: storagePath,
       // @ts-ignore - Passing custom agent for proxy support
       fetchOptions: agent ? {
-        agent
-      } : undefined,
+        agent,
+        // Increase timeout for proxy connections
+        timeout: 30000
+      } : {
+        timeout: 30000
+      },
       loginCallbacks: {
         onQrUrl: async (url) => {
           console.log(`[WeChatManager] SUCCESS: QR URL received for ${supplierName}: ${url}`);
@@ -165,7 +169,10 @@ export async function startSupplierBot(
         }
       });
     } catch (err: any) {
-      const isNetworkError = err?.toString().includes('fetch failed') || err?.code === 'EAI_AGAIN';
+      const isNetworkError = err?.toString().includes('fetch failed') || 
+                             err?.code === 'EAI_AGAIN' || 
+                             err?.code === 'UND_ERR_CONNECT_TIMEOUT' ||
+                             err?.name === 'ConnectTimeoutError';
       
       if (isNetworkError && attempt <= 5) {
         const delay = Math.pow(2, attempt) * 1000;
