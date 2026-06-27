@@ -37,14 +37,16 @@ export async function GET(req: NextRequest) {
         supplier.name,
         () => {},
         async (wechatUserId) => {
-          // This callback is already handled in manager.ts for DB updates,
-          // but we can add extra logic here if needed.
+          // This callback is already handled in manager.ts for DB updates
         }
       ).catch(err => console.error(`[WeChat][${supplier.name}] Restart failed:`, err));
       
-      // Wait a bit for the bot to initialize and potentially get a QR URL
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      session = getSession(supplierId);
+      // Wait longer for the bot to initialize and get a QR URL
+      for (let i = 0; i < 5; i++) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        session = getSession(supplierId);
+        if (session?.qrUrl) break;
+      }
     }
   }
 

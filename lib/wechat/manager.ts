@@ -162,8 +162,21 @@ export function startSupplierBot(
         if (!resolved) { resolved = true; resolve(session); }
         onActive(creds.accountId ?? '');
         await bot.start();
-      } catch (err) {
+      } catch (err: any) {
         clearTimeout(timeout);
+        
+        const isTimeout = err?.toString().includes('TimeoutError') || err?.name === 'TimeoutError';
+        if (isTimeout && session.qrUrl) {
+          console.log(`[WeChat][${supplierName}] Login timed out but QR is available. Continuing in background...`);
+          // Don't delete session, just wait for user to scan
+          try {
+            await bot.start();
+          } catch (startErr) {
+            console.error(`[WeChat][${supplierName}] Failed to start after timeout:`, startErr);
+          }
+          return;
+        }
+
         console.error(`[WeChat][${supplierName}] bot error:`, err);
         session.status = 'expired';
         sessions.delete(supplierId);
