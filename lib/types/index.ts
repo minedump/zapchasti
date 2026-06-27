@@ -146,6 +146,8 @@ export interface DbTemplate {
   created_at: string;
 }
 
+export type ApiService = 'telegram' | 'wechat' | 'openai' | 'other';
+
 export interface DbApiKey {
   id: string;
   service: ApiService;
