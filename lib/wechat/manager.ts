@@ -53,7 +53,9 @@ export async function startSupplierBot(
 
   console.log(`[WeChatManager] Initializing bot for supplier ${supplierName} (${supplierId})...`);
 
-  const proxy = process.env.WECHAT_PROXY;
+  const proxy = process.env.PROXY_URL || process.env.WECHAT_PROXY;
+  console.log(`[WeChatManager] Proxy status: ${proxy ? 'CONFIGURED' : 'NOT CONFIGURED'}`);
+  
   const storagePath = path.join(os.homedir(), '.wechatbot', supplierId);
   
   if (proxy) {
