@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
       ).catch(err => console.error(`[WeChat][${supplier.name}] Restart failed:`, err));
       
       // Wait a bit for the bot to initialize and potentially get a QR URL
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
       session = getSession(supplierId);
     }
   }

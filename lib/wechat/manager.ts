@@ -78,40 +78,40 @@ export function startSupplierBot(
       storageDir: path.join(supplierStorageDir, 'creds.json'),
       logLevel: 'info',
       loginCallbacks: {
-        onQrUrl: async (url: string) => {
+        onQrUrl: (url: string) => {
           console.log(`[WeChat][${supplierName}] QR URL received: ${url}`);
           session.qrUrl = url;
           session.status = 'pending_qr';
-          await updateDbStatus(supplierId, 'pending_qr');
+          updateDbStatus(supplierId, 'pending_qr').catch(console.error);
         },
-        onScanned: async () => {
+        onScanned: () => {
           console.log(`[WeChat][${supplierName}] QR Scanned, awaiting confirmation`);
           session.status = 'scanned';
-          await updateDbStatus(supplierId, 'scanned');
+          updateDbStatus(supplierId, 'scanned').catch(console.error);
         },
-        onExpired: async () => {
+        onExpired: () => {
           console.log(`[WeChat][${supplierName}] QR Expired`);
           session.status = 'expired';
-          await updateDbStatus(supplierId, 'expired');
+          updateDbStatus(supplierId, 'expired').catch(console.error);
         }
       }
     });
 
     // Register event handlers
-    bot.on('login', async (creds: any) => {
+    bot.on('login', (creds: any) => {
       console.log(`[WeChat][${supplierName}] Logged in, account: ${creds.accountId}`);
       session.status = 'online';
       session.qrUrl = null;
-      await updateDbStatus(supplierId, 'active');
+      updateDbStatus(supplierId, 'active').catch(console.error);
     });
 
-    bot.on('session:expired', async () => {
+    bot.on('session:expired', () => {
       console.log(`[WeChat][${supplierName}] Session expired`);
       session.status = 'offline';
-      await updateDbStatus(supplierId, 'inactive');
+      updateDbStatus(supplierId, 'inactive').catch(console.error);
     });
 
-    bot.on('error', async (error: any) => {
+    bot.on('error', (error: any) => {
       // If it's just a timeout during QR generation but we HAVE a QR URL, don't kill the session
       const isTimeout = error?.toString().includes('TimeoutError') || error?.name === 'TimeoutError';
       if (isTimeout && session.qrUrl) {
@@ -120,7 +120,7 @@ export function startSupplierBot(
       }
       console.error(`[WeChat][${supplierName}] Bot error:`, error);
       session.status = 'error';
-      await updateDbStatus(supplierId, 'error');
+      updateDbStatus(supplierId, 'error').catch(console.error);
     });
 
     bot.on('close', () => {
