@@ -1,4 +1,4 @@
-﻿﻿﻿import { WeChatBot } from '@wechatbot/wechatbot';
+﻿﻿﻿﻿import { WeChatBot } from '@wechatbot/wechatbot';
 import path from 'path';
 import os from 'os';
 import { createServiceClient } from '../supabase/service';
@@ -31,25 +31,35 @@ export async function generateAndSaveQR(supplierId: string, supplierName: string
   console.log(`[WeChat] Generating QR for ${supplierName}...`);
   
   return new Promise((resolve, reject) => {
+    const save = async (url: string) => {
+      console.log(`[WeChat] Saving URL to DB: ${url}`);
+      clearTimeout(timeout);
+      await updateDbStatus(supplierId, 'pending_qr', url);
+      bot.stop();
+      resolve(url);
+    };
+
     const bot = new WeChatBot({
       storageDir: `./.wechatbot/temp_${supplierId}`,
       loginCallbacks: {
         onQrUrl: async (url: string) => {
           console.log(`[WeChat] SUCCESS (onQrUrl): Got URL: ${url}`);
-          clearTimeout(timeout);
-          await updateDbStatus(supplierId, 'pending_qr', url);
-          bot.stop();
-          resolve(url);
-        },
-        // @ts-ignore
-        qr: async (url: string) => {
-          console.log(`[WeChat] SUCCESS (qr): Got URL: ${url}`);
-          clearTimeout(timeout);
-          await updateDbStatus(supplierId, 'pending_qr', url);
-          bot.stop();
-          resolve(url);
+          await save(url);
         }
       }
+    });
+
+    // Listen to events as well, as callbacks might be unreliable in this SDK version
+    // @ts-ignore
+    bot.on('qr', async (url: string) => {
+      console.log(`[WeChat] SUCCESS (event qr): Got URL: ${url}`);
+      await save(url);
+    });
+
+    // @ts-ignore
+    bot.on('qrUrl', async (url: string) => {
+      console.log(`[WeChat] SUCCESS (event qrUrl): Got URL: ${url}`);
+      await save(url);
     });
 
     const timeout = setTimeout(() => {
