@@ -117,18 +117,14 @@ export interface DbDealStatusHistory {
 
 export interface DbSupplier {
   id: string;
-  user_id: string;
-  chat_id: string;
   name: string;
-  brands: string[];
-  session_status: SessionStatus;
-  session_expires_at: string | null;
-  is_active: boolean;
+  contact_info: string | null;
+  user_id: string | null;
+  wechat_user_id: string | null;
+  qr_url: string | null;
+  status: SessionStatus;
   created_at: string;
   updated_at: string;
-  // joined
-  user?: DbUser;
-  chat?: DbChat;
 }
 
 export interface TemplateField {
