@@ -42,7 +42,12 @@ function credPath(supplierId: string): string {
  * If credentials exist on disk — auto-login (no QR needed).
  * If not — shows QR URL via onQrUrl callback.
  */
-export async function startSupplierBot(
+/**
+ * Start a bot for a supplier.
+ * Returns a Promise that resolves once the QR URL is ready (or creds restored).
+ * The login + long-poll loop continues running in the background after that.
+ */
+export function startSupplierBot(
   supplierId: string,
   supplierName: string,
   onQrUrl: (url: string) => void,
@@ -50,7 +55,7 @@ export async function startSupplierBot(
 ): Promise<BotSession> {
   // If already running — return existing
   const existing = sessions.get(supplierId);
-  if (existing && existing.status === 'active') return existing;
+  if (existing && existing.status === 'active') return Promise.resolve(existing);
 
   const session: BotSession = {
     supplierId,
@@ -64,58 +69,61 @@ export async function startSupplierBot(
   // Each supplier gets its own storage directory so credentials don't collide
   const supplierStorageDir = path.join(os.homedir(), '.wechatbot', supplierId);
 
-  const bot = new WeChatBot({
-    storage: 'file',
-    storageDir: supplierStorageDir,
-    logLevel: 'info',
-    loginCallbacks: {
-      onQrUrl: (url: string) => {
-        session.qrUrl = url;
-        session.status = 'pending_qr';
-        onQrUrl(url);
+  return new Promise<BotSession>((resolve, reject) => {
+    let resolved = false;
+
+    const bot = new WeChatBot({
+      storage: 'file',
+      storageDir: supplierStorageDir,
+      logLevel: 'info',
+      loginCallbacks: {
+        onQrUrl: (url: string) => {
+          session.qrUrl = url;
+          session.status = 'pending_qr';
+          onQrUrl(url);
+          // Resolve as soon as QR is ready — caller can display it immediately
+          if (!resolved) { resolved = true; resolve(session); }
+        },
+        onScanned: () => {
+          console.log(`[WeChat] ${supplierName} scanned QR`);
+        },
+        onExpired: () => {
+          session.status = 'expired';
+          console.log(`[WeChat] ${supplierName} session expired`);
+        },
       },
-      onScanned: () => {
-        console.log(`[WeChat] ${supplierName} scanned QR`);
-      },
-      onExpired: () => {
+    });
+
+    session.bot = bot;
+    sessions.set(supplierId, session);
+
+    // Register message handler
+    bot.onMessage(async (msg) => {
+      const text = msg.text || '[медиа]';
+      console.log(`[WeChat][${supplierName}] ${msg.userId} → ${text}`);
+      if (globalMessageCallback) {
+        await globalMessageCallback(supplierId, msg.userId, text, msg.raw);
+      }
+    });
+
+    // Run login + long-poll in background
+    (async () => {
+      try {
+        const creds = await bot.login();
+        session.wechatUserId = creds.accountId ?? null;
+        session.status = 'active';
+        // If creds were restored from disk (no QR shown), resolve here
+        if (!resolved) { resolved = true; resolve(session); }
+        onActive(creds.accountId ?? '');
+        await bot.start();
+      } catch (err) {
+        console.error(`[WeChat][${supplierName}] bot error:`, err);
         session.status = 'expired';
-        console.log(`[WeChat] ${supplierName} session expired`);
-      },
-    },
+        sessions.delete(supplierId);
+        if (!resolved) { resolved = true; reject(err); }
+      }
+    })();
   });
-
-  session.bot = bot;
-  sessions.set(supplierId, session);
-
-  // Register message handler
-  bot.onMessage(async (msg) => {
-    const text = msg.text || '[медиа]';
-    console.log(`[WeChat][${supplierName}] ${msg.userId} → ${text}`);
-
-    if (globalMessageCallback) {
-      await globalMessageCallback(supplierId, msg.userId, text, msg.raw);
-    }
-  });
-
-  // Login then start long-poll — both run in background.
-  // onQrUrl fires during login() before it resolves, so the caller
-  // can capture the QR URL without waiting for the scan.
-  (async () => {
-    try {
-      const creds = await bot.login();
-      session.wechatUserId = creds.accountId ?? null;
-      session.status = 'active';
-      onActive(creds.accountId ?? '');
-
-      // Start long-poll loop (runs until bot.stop())
-      await bot.start();
-    } catch (err) {
-      console.error(`[WeChat][${supplierName}] bot error:`, err);
-      session.status = 'expired';
-    }
-  })();
-
-  return session;
 }
 
 /**

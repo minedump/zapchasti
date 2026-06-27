@@ -36,66 +36,52 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error?.message || 'Failed to create supplier' }, { status: 500 });
   }
 
-  try {
-    // Wait for QR URL to be emitted (fires quickly — before scan).
-    // startSupplierBot returns immediately; login + poll run in background.
-    const qrUrl = await new Promise<string | null>((resolve) => {
-      const timer = setTimeout(() => resolve(null), 15000);
+  const onActive = async (wechatUserId: string) => {
+    await serviceSupabase
+      .from('suppliers')
+      .update({
+        session_status: 'active',
+        session_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      })
+      .eq('id', supplier.id);
 
-      const onActive = async (wechatUserId: string) => {
-        // On successful scan — update supplier record
-        await serviceSupabase
-          .from('suppliers')
-          .update({
-            session_status: 'active',
-            session_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-          })
-          .eq('id', supplier.id);
-
-        // Create/link chat
-        const { data: chat } = await serviceSupabase
-          .from('chats')
-          .upsert(
-            {
-              chat_type: 'wechat',
-              external_id: wechatUserId,
-              last_message_at: new Date().toISOString(),
-            },
-            { onConflict: 'chat_type,external_id' }
-          )
-          .select()
-          .single();
-
-        if (chat) {
-          await serviceSupabase
-            .from('suppliers')
-            .update({ chat_id: chat.id })
-            .eq('id', supplier.id);
-        }
-      };
-
-      // startSupplierBot now returns immediately after registering handlers.
-      // The bot login loop runs in background; onQrUrl fires within ~1-2s.
-      startSupplierBot(
-        supplier.id,
-        supplierName,
-        (url) => {
-          clearTimeout(timer);
-          resolve(url);
+    const { data: chat } = await serviceSupabase
+      .from('chats')
+      .upsert(
+        {
+          chat_type: 'wechat',
+          external_id: wechatUserId,
+          last_message_at: new Date().toISOString(),
         },
-        onActive
-      ).catch((err: Error) => {
-        clearTimeout(timer);
-        console.error('[WeChat] startSupplierBot error:', err);
-        resolve(null);
-      });
-    });
+        { onConflict: 'chat_type,external_id' }
+      )
+      .select()
+      .single();
+
+    if (chat) {
+      await serviceSupabase
+        .from('suppliers')
+        .update({ chat_id: chat.id })
+        .eq('id', supplier.id);
+    }
+  };
+
+  try {
+    // startSupplierBot resolves as soon as QR URL is ready (or creds restored).
+    // Login + long-poll continue running in the background.
+    const session = await startSupplierBot(
+      supplier.id,
+      supplierName,
+      () => {}, // onQrUrl stored in session.qrUrl
+      onActive
+    );
 
     return NextResponse.json({
       supplierId: supplier.id,
-      qrCode: qrUrl,
+      qrCode: session.qrUrl,
     });
   } catch (err) {
+    console.error('[WeChat] startSupplierBot failed:', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
