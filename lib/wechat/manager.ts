@@ -74,9 +74,7 @@ export function startSupplierBot(
 
     const bot = new WeChatBot({
       storage: 'file',
-      storageOptions: {
-        path: path.join(supplierStorageDir, 'creds.json'),
-      },
+      storageDir: path.join(supplierStorageDir, 'creds.json'),
       logLevel: 'info',
       onQrUrl: (url: string) => {
         console.log(`[WeChat][${supplierName}] QR URL received: ${url}`);
