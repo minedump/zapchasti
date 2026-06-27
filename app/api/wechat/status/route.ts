@@ -18,11 +18,10 @@ export async function GET(req: NextRequest) {
   }
 
   let session = getSession(supplierId);
+  const serviceSupabase = createServiceClient();
 
   // If no session or expired, try to start/restart the bot
-  // But DON'T restart if we already have a QR URL or if it's already pending
   if (!session || (session.status === 'expired' && !session.qrUrl)) {
-    const serviceSupabase = createServiceClient();
     const { data: supplier } = await serviceSupabase
       .from('suppliers')
       .select('id, name')
@@ -30,33 +29,22 @@ export async function GET(req: NextRequest) {
       .single();
 
     if (supplier) {
-      console.log(`[WeChat][${supplier.name}] Restarting bot from status check`);
-      // Start in background, don't await full login
-      startSupplierBot(
-        supplier.id,
-        supplier.name,
-        () => {},
-        async (wechatUserId) => {
-          // This callback is already handled in manager.ts for DB updates
-        }
-      ).catch(err => console.error(`[WeChat][${supplier.name}] Restart failed:`, err));
-      
-      // Wait longer for the bot to initialize and get a QR URL
-      for (let i = 0; i < 5; i++) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        session = getSession(supplierId);
-        if (session?.qrUrl) break;
-      }
+      console.log(`[WeChat][${supplier.name}] Starting bot from status check`);
+      startSupplierBot(supplier.id, supplier.name, () => {}, () => {})
+        .catch(err => console.error(`[WeChat][${supplier.name}] Start failed:`, err));
     }
   }
 
-  if (!session) {
-    return NextResponse.json({ status: 'inactive' });
-  }
+  // Always return the latest data from DB
+  const { data: dbSupplier } = await serviceSupabase
+    .from('suppliers')
+    .select('session_status, qr_url, wechat_user_id')
+    .eq('id', supplierId)
+    .single();
 
   return NextResponse.json({
-    status: session.status,
-    qrUrl: session.qrUrl,
-    wechatUserId: session.wechatUserId
+    status: dbSupplier?.session_status || 'inactive',
+    qrUrl: dbSupplier?.qr_url || null,
+    wechatUserId: dbSupplier?.wechat_user_id || null
   });
 }

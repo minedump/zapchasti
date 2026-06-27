@@ -85,7 +85,7 @@ export function startSupplierBot(
           console.log(`[WeChat][${supplierName}] QR URL received: ${url}`);
           session.qrUrl = url;
           session.status = 'pending_qr';
-          updateDbStatus(supplierId, 'pending_qr').catch(console.error);
+          updateDbStatus(supplierId, 'pending_qr', url).catch(console.error);
         },
         onScanned: () => {
           console.log(`[WeChat][${supplierName}] QR Scanned, awaiting confirmation`);
@@ -236,12 +236,15 @@ export function stopBot(supplierId: string): void {
   }
 }
 
-async function updateDbStatus(supplierId: string, status: string) {
+async function updateDbStatus(supplierId: string, status: string, qrUrl: string | null = null) {
   try {
     const supabase = createServiceClient();
+    const updateData: any = { session_status: status };
+    if (qrUrl !== undefined) updateData.qr_url = qrUrl;
+    
     await supabase
       .from('suppliers')
-      .update({ session_status: status })
+      .update(updateData)
       .eq('id', supplierId);
   } catch (err) {
     console.error(`[WeChat][${supplierId}] Failed to update DB status:`, err);

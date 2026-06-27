@@ -91,7 +91,14 @@ function SuppliersTab() {
         if (json.qrUrl) {
           setQrCode(json.qrUrl);
           setActiveSupplierId(pollingId);
-          setGenerating(null); // Останавливаем спиннер, если он был
+          setGenerating(null);
+        }
+
+        if (json.status === 'online' || json.status === 'active') {
+          setQrCode(null);
+          setPollingId(null);
+          setGenerating(null);
+          fetchSuppliers();
         }
 
         if (json.status === 'online' || json.status === 'active') {
