@@ -110,14 +110,14 @@ export function startSupplierBot(
       }
     });
 
-    // Safety timeout: if no QR or login in 20s, resolve anyway so API doesn't hang
+    // Safety timeout: if no QR or login in 60s, resolve anyway so API doesn't hang
     const timeout = setTimeout(() => {
       if (!resolved) {
-        console.log(`[WeChat][${supplierName}] Login timeout reached, resolving with current state`);
+        console.log(`[WeChat][${supplierName}] Login timeout reached (60s), resolving with current state`);
         resolved = true;
         resolve(session);
       }
-    }, 20000);
+    }, 60000);
 
     // Run login + long-poll in background
     (async () => {
