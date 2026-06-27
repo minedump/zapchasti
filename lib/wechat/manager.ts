@@ -115,15 +115,28 @@ export async function startSupplierBot(
       }
     });
 
-    // Start the bot in background
-    bot.run().catch(err => {
-      console.error(`[WeChatManager] Failed to run bot for ${supplierName}:`, err);
-      session.status = 'error';
-      updateDbStatus(supplierId, 'error');
-    });
+  // Start the bot in background with retry logic
+  const startWithRetry = async (attempt = 1) => {
+    try {
+      await bot.run();
+    } catch (err: any) {
+      const isNetworkError = err?.toString().includes('fetch failed') || err?.code === 'EAI_AGAIN';
+      
+      if (isNetworkError && attempt <= 5) {
+        const delay = Math.pow(2, attempt) * 1000;
+        console.warn(`[WeChatManager] Network error for ${supplierName}. Retrying in ${delay}ms (Attempt ${attempt}/5)...`);
+        setTimeout(() => startWithRetry(attempt + 1), delay);
+      } else {
+        console.error(`[WeChatManager] Failed to run bot for ${supplierName} after ${attempt} attempts:`, err);
+        session.status = 'error';
+        updateDbStatus(supplierId, 'error');
+      }
+    }
+  };
 
-    return session;
-  } catch (error) {
+  startWithRetry();
+
+  return session;  } catch (error) {
     console.error(`[WeChatManager] Error initializing bot for ${supplierName}:`, error);
     sessions.delete(supplierId);
     throw error;
