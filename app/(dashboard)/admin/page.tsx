@@ -77,6 +77,38 @@ function SuppliersTab() {
   const [activeSupplierId, setActiveSupplierId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [generating, setGenerating] = useState<string | null>(null);
+  const [pollingId, setPollingId] = useState<string | null>(null);
+
+  // Polling for QR code or status changes
+  useEffect(() => {
+    if (!pollingId) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/wechat/status?supplierId=${pollingId}`);
+        const json = await res.json() as { status: string; qrUrl: string | null };
+        
+        if (json.qrUrl) {
+          setQrCode(json.qrUrl);
+          setActiveSupplierId(pollingId);
+        }
+
+        if (json.status === 'online' || json.status === 'active') {
+          setQrCode(null);
+          setPollingId(null);
+          fetchSuppliers();
+        }
+
+        if (json.status === 'error' || json.status === 'expired') {
+          setPollingId(null);
+        }
+      } catch (e) {
+        console.error('Polling error:', e);
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [pollingId]);
 
   async function fetchSuppliers() {
     setLoading(true);
@@ -92,11 +124,17 @@ function SuppliersTab() {
     if (!newName.trim()) return;
     setAdding(true);
     const brands = newBrands.split(',').map((b) => b.trim()).filter(Boolean);
-    await fetch('/api/wechat/qr', {
+    const res = await fetch('/api/wechat/qr', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ supplierName: newName, brands }),
     });
+    const json = await res.json() as { supplierId: string };
+    
+    if (json.supplierId) {
+      setPollingId(json.supplierId);
+    }
+
     setAdding(false);
     setNewName('');
     setNewBrands('');
@@ -108,13 +146,9 @@ function SuppliersTab() {
     setGenerating(id);
     setQrCode(null);
     setActiveSupplierId(id);
-    try {
-      const res = await fetch(`/api/wechat/qr/${id}`, { method: 'POST' });
-      const json = await res.json() as { qrCode: string };
-      setQrCode(json.qrCode);
-    } catch (e) {
-      console.error(e);
-    }
+    setPollingId(id);
+    // The bot might already be running or need a restart
+    // For now, we just start polling the status
     setGenerating(null);
   }
 

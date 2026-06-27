@@ -36,35 +36,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error?.message || 'Failed to create supplier' }, { status: 500 });
   }
 
-  const onActive = async (wechatUserId: string) => {
-    await serviceSupabase
-      .from('suppliers')
-      .update({
-        session_status: 'active',
-        session_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      })
-      .eq('id', supplier.id);
-
-    const { data: chat } = await serviceSupabase
-      .from('chats')
-      .upsert(
-        {
-          chat_type: 'wechat',
-          external_id: wechatUserId,
-          last_message_at: new Date().toISOString(),
-        },
-        { onConflict: 'chat_type,external_id' }
-      )
-      .select()
-      .single();
-
-    if (chat) {
-      await serviceSupabase
-        .from('suppliers')
-        .update({ chat_id: chat.id })
-        .eq('id', supplier.id);
-    }
-  };
+  // Start the bot in the background
+  startSupplierBot(
+    supplier.id,
+    supplier.name,
+    () => {}, // QR URL is stored in the session manager
+    onActive
+  ).catch(err => console.error(`[WeChat][${supplierName}] Failed to start bot:`, err));
 
   return NextResponse.json({
     supplierId: supplier.id,
