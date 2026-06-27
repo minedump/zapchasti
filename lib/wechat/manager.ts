@@ -24,7 +24,10 @@ export interface BotSession {
 }
 
 // Singleton map: supplierId -> BotSession
-const sessions = new Map<string, BotSession>();
+const sessions = (global as any).wechatSessions || new Map<string, BotSession>();
+if (!(global as any).wechatSessions) {
+  (global as any).wechatSessions = sessions;
+}
 
 // Callbacks registered by the webhook layer
 type MessageCallback = (supplierId: string, userId: string, text: string, raw: unknown) => Promise<void>;

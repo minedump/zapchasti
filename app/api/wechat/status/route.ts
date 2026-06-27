@@ -20,8 +20,8 @@ export async function GET(req: NextRequest) {
   let session = getSession(supplierId);
 
   // If no session or expired, try to start/restart the bot
-  // But DON'T restart if we already have a QR URL (even if status is error/pending)
-  if (!session || (session.status === 'expired' || session.status === 'error') && !session.qrUrl) {
+  // But DON'T restart if we already have a QR URL or if it's already pending
+  if (!session || ((session.status === 'expired' || session.status === 'error') && !session.qrUrl)) {
     const serviceSupabase = createServiceClient();
     const { data: supplier } = await serviceSupabase
       .from('suppliers')
