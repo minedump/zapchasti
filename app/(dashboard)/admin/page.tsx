@@ -91,6 +91,7 @@ function SuppliersTab() {
         if (json.qrUrl) {
           setQrCode(json.qrUrl);
           setActiveSupplierId(pollingId);
+          setGenerating(null); // Останавливаем спиннер, если он был
         }
 
         if (json.status === 'online' || json.status === 'active') {
@@ -147,9 +148,6 @@ function SuppliersTab() {
     setQrCode(null);
     setActiveSupplierId(id);
     setPollingId(id);
-    // The bot might already be running or need a restart
-    // For now, we just start polling the status
-    setGenerating(null);
   }
 
   const sessionIcon = (status: SessionStatus) => {
