@@ -85,12 +85,17 @@ export async function POST(req: NextRequest) {
   };
 
   // Start the bot in the background
+  console.log(`[API/QR] Triggering bot start for supplier: ${supplier.name} (${supplier.id})`);
   startSupplierBot(
     supplier.id,
     supplier.name,
-    () => {}, // QR URL is stored in the session manager
+    (url) => console.log(`[API/QR] Callback: QR URL ready for ${supplier.name}: ${url}`),
     onActive
-  ).catch(err => console.error(`[WeChat][${supplierName}] Failed to start bot:`, err));
+  ).then(() => {
+    console.log(`[API/QR] Bot initialization call finished for ${supplier.name}`);
+  }).catch(err => {
+    console.error(`[API/QR] CRITICAL: Failed to start bot for ${supplier.name}:`, err);
+  });
 
   return NextResponse.json({
     supplierId: supplier.id,

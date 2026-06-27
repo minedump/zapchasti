@@ -50,6 +50,9 @@ export async function startSupplierBot(
 
   console.log(`[WeChatManager] Initializing bot for supplier ${supplierName} (${supplierId})...`);
 
+  const storagePath = path.join(os.homedir(), '.wechatbot', supplierId);
+  console.log(`[WeChatManager] Storage path: ${storagePath}`);
+
   const session: BotSession = {
     supplierId,
     supplierName,
@@ -59,56 +62,49 @@ export async function startSupplierBot(
     wechatUserId: null,
   };
 
-  const bot = new WeChatBot({
-    storageDir: path.join(os.homedir(), '.wechatbot', supplierId),
-    loginCallbacks: {
-      onQrUrl: async (url) => {
-        console.log(`[WeChatManager] QR Code for ${supplierName}: ${url}`);
-        session.qrUrl = url;
-        session.status = 'pending_qr';
-        onQrUrl(url);
-        await updateDbStatus(supplierId, 'pending_qr', url);
-      },
-      onScanned: async () => {
-        console.log(`[WeChatManager] QR Scanned for ${supplierName}`);
-        session.status = 'scanned';
-        await updateDbStatus(supplierId, 'scanned');
-      },
-      onExpired: async () => {
-        console.log(`[WeChatManager] QR Expired for ${supplierName}`);
-        session.status = 'expired';
-        session.qrUrl = null;
-        await updateDbStatus(supplierId, 'inactive');
+  try {
+    const bot = new WeChatBot({
+      storageDir: storagePath,
+      loginCallbacks: {
+        onQrUrl: async (url) => {
+          console.log(`[WeChatManager] SUCCESS: QR URL received for ${supplierName}: ${url}`);
+          session.qrUrl = url;
+          session.status = 'pending_qr';
+          onQrUrl(url);
+          await updateDbStatus(supplierId, 'pending_qr', url);
+        },
+        onScanned: async () => {
+          console.log(`[WeChatManager] INFO: QR Scanned for ${supplierName}`);
+          session.status = 'scanned';
+          await updateDbStatus(supplierId, 'scanned');
+        },
+        onExpired: async () => {
+          console.log(`[WeChatManager] WARN: QR Expired for ${supplierName}`);
+          session.status = 'expired';
+          session.qrUrl = null;
+          await updateDbStatus(supplierId, 'inactive');
+        }
       }
-    }
-  });
+    });
 
-  session.bot = bot;
-  sessions.set(supplierId, session);
+    session.bot = bot;
+    sessions.set(supplierId, session);
 
-  // Event Handlers
-  bot.on('login', async (creds) => {
-    console.log(`[WeChatManager] Login success for ${supplierName}: ${creds.userId}`);
-    session.status = 'active';
-    session.qrUrl = null;
-    session.wechatUserId = creds.userId;
-    onActive(creds.userId);
-    await updateDbStatus(supplierId, 'online', null, creds.userId);
-  });
+    bot.on('login', async (creds) => {
+      console.log(`[WeChatManager] SUCCESS: Login complete for ${supplierName}. UserID: ${creds.userId}`);
+      session.status = 'active';
+      session.qrUrl = null;
+      session.wechatUserId = creds.userId;
+      onActive(creds.userId);
+      await updateDbStatus(supplierId, 'online', null, creds.userId);
+    });
 
-  bot.on('session:expired', async () => {
-    console.log(`[WeChatManager] Session expired for ${supplierName}`);
-    session.status = 'expired';
-    await updateDbStatus(supplierId, 'inactive');
-  });
-
-  bot.on('error', async (err: any) => {
-    // Ignore errors during QR phase to prevent restart loops
-    if (session.status === 'pending_qr' || session.status === 'scanned') {
-      return;
-    }
-    console.error(`[WeChatManager] Bot error for ${supplierName}:`, err?.message || err);
-  });
+    bot.on('error', async (err: any) => {
+      console.error(`[WeChatManager] SDK ERROR for ${supplierName}:`, err?.message || err);
+      if (session.status !== 'pending_qr' && session.status !== 'scanned') {
+        await updateDbStatus(supplierId, 'error');
+      }
+    });
 
   bot.onMessage(async (msg) => {
     const text = msg.text || '[media]';
