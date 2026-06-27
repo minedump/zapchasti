@@ -14,6 +14,17 @@ export type DealStatus =
   | 'found'
   | 'rejected'
   | 'closed';
+export interface DbUser {
+  id: string;
+  telegram_id: number | null;
+  wechat_id: string | null;
+  username: string | null;
+  display_name: string | null;
+  role: 'client' | 'operator' | 'admin' | 'supplier';
+  created_at: string;
+  updated_at: string;
+}
+
 export type SessionStatus = 'active' | 'expiring' | 'inactive' | 'pending_qr' | 'scanned' | 'error' | 'online' | 'offline';
 
 export interface DbSupplier {
