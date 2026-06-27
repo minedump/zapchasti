@@ -336,24 +336,9 @@ function SuppliersTab() {
 // ============================================================
 // Template Tab
 // ============================================================
-const DEFAULT_SCHEMA = {
-  fields: [
-    { key: 'brand', label: 'Марка автомобиля', description: 'Марка автомобиля (Toyota, BMW, Mercedes и т.д.)', required: true, type: 'text' },
-    { key: 'model', label: 'Модель', description: 'Модель автомобиля (Camry, X5, E-Class и т.д.)', required: true, type: 'text' },
-    { key: 'year', label: 'Год выпуска', description: 'Год выпуска автомобиля', required: true, type: 'text' },
-    { key: 'vin', label: 'VIN-номер', description: 'VIN-номер автомобиля (17 символов)', required: false, type: 'text' },
-    { key: 'part', label: 'Запчасть', description: 'Название нужной запчасти', required: true, type: 'text' },
-    { key: 'condition', label: 'Состояние', description: 'Новая или б/у запчасть', required: false, type: 'select', options: ['новая', 'б/у', 'любое'] },
-    { key: 'budget', label: 'Бюджет', description: 'Максимальный бюджет в рублях', required: false, type: 'text' },
-    { key: 'urgency', label: 'Срочность', description: 'Как срочно нужна запчасть', required: false, type: 'select', options: ['срочно', 'в течение недели', 'не срочно'] },
-    { key: 'city', label: 'Город', description: 'Город доставки', required: false, type: 'text' },
-    { key: 'notes', label: 'Дополнительно', description: 'Любые дополнительные сведения', required: false, type: 'text' },
-  ],
-};
-
 function TemplateTab() {
   const [template, setTemplate] = useState<DbTemplate | null>(null);
-  const [schemaText, setSchemaText] = useState(JSON.stringify(DEFAULT_SCHEMA, null, 2));
+  const [schemaText, setSchemaText] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -366,9 +351,8 @@ function TemplateTab() {
           setTemplate(json.data);
           setSchemaText(JSON.stringify(json.data.schema, null, 2));
         }
-        // если Supabase недоступен или шаблона нет — остаётся дефолтный
       })
-      .catch(() => { /* оставляем дефолтный шаблон */ });
+      .catch(() => { });
   }, []);
 
   async function handleSave() {
