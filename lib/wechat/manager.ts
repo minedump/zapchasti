@@ -17,7 +17,7 @@ export interface BotSession {
   supplierId: string;
   supplierName: string;
   bot: WeChatBot;
-  status: 'pending_qr' | 'active' | 'expired';
+  status: 'pending_qr' | 'scanned' | 'online' | 'offline' | 'error' | 'active' | 'expired';
   qrUrl: string | null;
   wechatUserId: string | null;
 }
@@ -97,7 +97,7 @@ export function startSupplierBot(
     bot.on('login', (creds: any) => {
       console.log(`[WeChat][${supplierName}] Logged in, account: ${creds.accountId}`);
       session.status = 'online';
-      session.qrUrl = undefined;
+      session.qrUrl = null;
     });
 
     bot.on('session:expired', () => {
