@@ -205,8 +205,10 @@ CREATE TABLE IF NOT EXISTS public.suppliers (
   brands TEXT[] NOT NULL DEFAULT '{}',
   session_id VARCHAR(255),
   session_status VARCHAR(50) NOT NULL DEFAULT 'inactive'
-    CHECK (session_status IN ('active', 'expiring', 'inactive')),
+    CHECK (session_status IN ('active', 'expiring', 'inactive', 'pending_qr', 'scanned', 'error', 'online', 'offline')),
   session_expires_at TIMESTAMPTZ,
+  qr_url TEXT,
+  wechat_user_id VARCHAR(255),
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
