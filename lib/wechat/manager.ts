@@ -237,7 +237,7 @@ export function stopBot(supplierId: string): void {
   }
 }
 
-async function updateDbStatus(supplierId: string, status: string, qrUrl: string | null = undefined, wechatUserId: string | null = undefined) {
+async function updateDbStatus(supplierId: string, status: string, qrUrl: string | null = null, wechatUserId: string | null = null) {
   try {
     const supabase = createServiceClient();
     const updateData: any = { session_status: status };
