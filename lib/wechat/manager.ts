@@ -1,4 +1,4 @@
-﻿﻿import { WeChatBot } from '@wechatbot/wechatbot';
+﻿import { WeChatBot } from '@wechatbot/wechatbot';
 import { createServiceClient } from '../supabase/service';
 import fs from 'fs';
 import path from 'path';
@@ -15,28 +15,21 @@ export async function generateAndSaveQR(supplierId: string, supplierName: string
       storageDir
     });
 
-    const save = async (url: string) => {
-      console.log(`[WeChat] SUCCESS: Got URL, saving to DB...`);
-      clearTimeout(timeout);
-      await updateDbStatus(supplierId, 'pending_qr', url);
-      bot.stop();
-      resolve(url);
-    };
-
     const timeout = setTimeout(() => {
       bot.stop();
       reject(new Error('Timeout getting QR from WeChat'));
     }, 60000);
 
-    // Обработка успешного сканирования и входа
+    const onQr = async (url: string) => {
+      console.log(`[WeChat] Got URL for ${supplierName}`);
+      await updateDbStatus(supplierId, 'pending_qr', url);
+      resolve(url);
+    };
+
     bot.on('login', async (creds) => {
       console.log(`[WeChat] Login success for ${supplierName}`);
       clearTimeout(timeout);
-      
-      // Сохраняем кредиты в БД
       await updateDbStatus(supplierId, 'active', null, creds.userId, creds);
-      
-      // Останавливаем бота и удаляем временные файлы
       bot.stop();
       try {
         if (fs.existsSync(storageDir)) {
@@ -47,12 +40,10 @@ export async function generateAndSaveQR(supplierId: string, supplierName: string
       }
     });
 
-    // Работающий способ: передача колбэков в login()
     bot.login({ 
-      // @ts-ignore - SDK types are incomplete
+      // @ts-ignore
       callbacks: {
-        onQrUrl: save,
-        onScan: save
+        onQrUrl: onQr
       } 
     }).catch(err => {
       clearTimeout(timeout);
@@ -60,27 +51,6 @@ export async function generateAndSaveQR(supplierId: string, supplierName: string
       reject(err);
     });
   });
-}
-
-async function updateDbStatus(supplierId: string, status: string, qrUrl: string | null = null, wechatUserId: string | null = null, credentials: any = null) {
-  try {
-    const supabase = createServiceClient();
-    const updateData: any = {
-      session_status: status,
-      qr_url: qrUrl,
-      wechat_user_id: wechatUserId,
-      session_data: credentials
-    };
-    
-    await supabase
-      .from('suppliers')
-      .update(updateData)
-      .eq('id', supplierId);
-      
-    console.log(`[DB] Updated ${supplierId} to ${status}`);
-  } catch (err) {
-    console.error(`[DB Error]`, err);
-  }
 }
 
 /**
@@ -101,17 +71,13 @@ export async function restoreSessionsFromDb() {
 
     for (const s of suppliers) {
       const storageDir = `./.wechatbot/${s.id}`;
-      
-      // Создаем папку и файл кредитов, если их нет
       if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
       
-      // SDK ожидает файл credentials.json внутри storageDir
       fs.writeFileSync(
         path.join(storageDir, 'credentials.json'), 
         JSON.stringify(s.session_data)
       );
 
-      // Запускаем бота для этого поставщика
       const bot = new WeChatBot({ storageDir });
       
       bot.onMessage(async (msg) => {
@@ -129,8 +95,6 @@ export async function restoreSessionsFromDb() {
 async function handleIncomingMessage(supplierId: string, msg: any) {
   try {
     const supabase = createServiceClient();
-    
-    // 1. Ищем или создаем чат
     const { data: chat } = await supabase
       .from('chats')
       .upsert({
@@ -142,7 +106,6 @@ async function handleIncomingMessage(supplierId: string, msg: any) {
 
     if (!chat) return;
 
-    // 2. Сохраняем сообщение
     await supabase.from('messages').insert({
       chat_id: chat.id,
       direction: 'incoming',
@@ -150,9 +113,28 @@ async function handleIncomingMessage(supplierId: string, msg: any) {
       media_url: msg.url || null,
       media_type: msg.type === 'image' ? 'photo' : 'none'
     });
-
-    console.log(`[WeChat] Message saved to DB for chat ${chat.id}`);
   } catch (err) {
     console.error(`[WeChat] Failed to handle message:`, err);
   }
 }
+
+async function updateDbStatus(supplierId: string, status: string, qrUrl: string | null = null, wechatUserId: string | null = null, credentials: any = null) {
+  try {
+    const supabase = createServiceClient();
+    const updateData: any = {
+      session_status: status,
+      qr_url: qrUrl,
+      wechat_user_id: wechatUserId,
+      session_data: credentials
+    };
+    
+    await supabase.from('suppliers').update(updateData).eq('id', supplierId);
+    console.log(`[DB] Updated ${supplierId} to ${status}`);
+  } catch (err) {
+    console.error(`[DB Error]`, err);
+  }
+}
+
+export async function startSupplierBot() {}
+export function getSession() { return undefined; }
+export function stopBot() {}
