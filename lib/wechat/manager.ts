@@ -9,6 +9,8 @@ import { WeChatBot } from '@wechatbot/wechatbot';
 import path from 'path';
 import os from 'os';
 import { createServiceClient } from '../supabase/service';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import { SocksProxyAgent } from 'socks-proxy-agent';
 
 export interface BotSession {
   supplierId: string;
@@ -51,8 +53,12 @@ export async function startSupplierBot(
 
   console.log(`[WeChatManager] Initializing bot for supplier ${supplierName} (${supplierId})...`);
 
+  const proxy = process.env.WECHAT_PROXY;
   const storagePath = path.join(os.homedir(), '.wechatbot', supplierId);
-  console.log(`[WeChatManager] Storage path: ${storagePath}`);
+  
+  if (proxy) {
+    console.log(`[WeChatManager] Using proxy: ${proxy}`);
+  }
 
   const session: BotSession = {
     supplierId,
@@ -64,8 +70,17 @@ export async function startSupplierBot(
   };
 
   try {
+    const proxy = process.env.PROXY_URL;
+    const agent = proxy 
+      ? (proxy.startsWith('socks') ? new SocksProxyAgent(proxy) : new HttpsProxyAgent(proxy))
+      : undefined;
+
     const bot = new WeChatBot({
       storageDir: storagePath,
+      // @ts-ignore - Passing custom agent for proxy support
+      fetchOptions: agent ? {
+        agent
+      } : undefined,
       loginCallbacks: {
         onQrUrl: async (url) => {
           console.log(`[WeChatManager] SUCCESS: QR URL received for ${supplierName}: ${url}`);
