@@ -9,8 +9,6 @@ import { WeChatBot } from '@wechatbot/wechatbot';
 import path from 'path';
 import os from 'os';
 import { createServiceClient } from '../supabase/service';
-import { HttpsProxyAgent } from 'https-proxy-agent';
-import { SocksProxyAgent } from 'socks-proxy-agent';
 
 export interface BotSession {
   supplierId: string;
@@ -19,6 +17,121 @@ export interface BotSession {
   status: 'pending_qr' | 'scanned' | 'online' | 'offline' | 'error' | 'active' | 'expired';
   qrUrl: string | null;
   wechatUserId: string | null;
+}
+
+const sessions = (global as any).wechatSessions || new Map<string, BotSession>();
+if (!(global as any).wechatSessions) {
+  (global as any).wechatSessions = sessions;
+}
+
+type MessageCallback = (supplierId: string, userId: string, text: string, raw: unknown) => Promise<void>;
+let globalMessageCallback: MessageCallback | null = null;
+
+export function setMessageCallback(cb: MessageCallback) {
+  globalMessageCallback = cb;
+}
+
+export async function startSupplierBot(
+  supplierId: string,
+  supplierName: string,
+  onQrUrl: (url: string) => void,
+  onActive: (wechatUserId: string) => void
+): Promise<BotSession> {
+  const existing = sessions.get(supplierId);
+  if (existing && (existing.status === 'active' || existing.status === 'online' || existing.status === 'pending_qr')) {
+    return existing;
+  }
+
+  const storagePath = path.join(os.homedir(), '.wechatbot', supplierId);
+  
+  const session: BotSession = {
+    supplierId,
+    supplierName,
+    bot: null as unknown as WeChatBot,
+    status: 'offline',
+    qrUrl: null,
+    wechatUserId: null,
+  };
+
+  const bot = new WeChatBot({
+    storageDir: storagePath,
+    loginCallbacks: {
+      onQrUrl: async (url) => {
+        console.log(`[WeChat] QR URL for ${supplierName}: ${url}`);
+        session.qrUrl = url;
+        session.status = 'pending_qr';
+        onQrUrl(url);
+        await updateDbStatus(supplierId, 'pending_qr', url);
+      },
+      onScanned: async () => {
+        console.log(`[WeChat] Scanned: ${supplierName}`);
+        session.status = 'scanned';
+        await updateDbStatus(supplierId, 'scanned');
+      },
+      onExpired: async () => {
+        console.log(`[WeChat] Expired: ${supplierName}`);
+        session.status = 'expired';
+        await updateDbStatus(supplierId, 'inactive');
+      }
+    }
+  });
+
+  session.bot = bot;
+  sessions.set(supplierId, session);
+
+  bot.on('login', async (creds) => {
+    console.log(`[WeChat] Login Success: ${supplierName} (${creds.userId})`);
+    session.status = 'active';
+    session.wechatUserId = creds.userId;
+    onActive(creds.userId);
+    await updateDbStatus(supplierId, 'online', null, creds.userId);
+  });
+
+  bot.onMessage(async (msg) => {
+    if (globalMessageCallback) {
+      await globalMessageCallback(supplierId, msg.userId, msg.text || '[media]', msg.raw);
+    }
+  });
+
+  // Просто запускаем, SDK сам вызовет нужные колбэки
+  bot.run().catch(err => {
+    console.error(`[WeChat] Run Error for ${supplierName}:`, err);
+    updateDbStatus(supplierId, 'error');
+  });
+
+  return session;
+}
+
+export async function sendToWeChat(supplierId: string, wechatUserId: string, text: string) {
+  const session = sessions.get(supplierId);
+  if (!session) throw new Error(`No session for ${supplierId}`);
+  await session.bot.send(wechatUserId, text);
+}
+
+async function updateDbStatus(supplierId: string, status: string, qrUrl: string | null = null, wechatUserId: string | null = null) {
+  try {
+    const supabase = createServiceClient();
+    const updateData: any = { session_status: status };
+    if (qrUrl) updateData.qr_url = qrUrl;
+    if (wechatUserId) updateData.wechat_user_id = wechatUserId;
+    
+    const { error } = await supabase
+      .from('suppliers')
+      .update(updateData)
+      .eq('id', supplierId);
+
+    if (error) console.error(`[DB Error] ${error.message}`);
+    else console.log(`[DB Success] Updated ${supplierId} to ${status}`);
+  } catch (err) {
+    console.error(`[Fatal DB Error]`, err);
+  }
+}
+
+export function getSession(id: string) { return sessions.get(id); }
+export function getAllSessions() { return Array.from(sessions.values()); }
+export function stopBot(id: string) {
+  const s = sessions.get(id);
+  if (s) { s.bot.stop(); sessions.delete(id); }
 }
 
 // Singleton map: supplierId -> BotSession
@@ -54,12 +167,6 @@ export async function startSupplierBot(
   console.log(`[WeChatManager] Initializing bot for supplier ${supplierName} (${supplierId})...`);
 
   const proxy = process.env.PROXY_URL || process.env.WECHAT_PROXY;
-  if (proxy) {
-    process.env.HTTPS_PROXY = proxy;
-    process.env.HTTP_PROXY = proxy;
-    const maskedProxy = proxy.replace(/:[^:@]+@/, ':***@');
-    console.log(`[WeChatManager] Global proxy set: ${maskedProxy}`);
-  }
   console.log(`[WeChatManager] Proxy status: ${proxy ? 'CONFIGURED' : 'NOT CONFIGURED'}`);
   
   const storagePath = path.join(os.homedir(), '.wechatbot', supplierId);
