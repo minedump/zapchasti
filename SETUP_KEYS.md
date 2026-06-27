@@ -10,7 +10,7 @@
 2. [Telegram Bot Token](#2-telegram-bot-token)
 3. [Telegram Webhook Secret](#3-telegram-webhook-secret)
 4. [DeepSeek API Key](#4-deepseek-api-key)
-5. [iLink Bot API (WeChat)](#5-ilink-bot-api-wechat)
+5. [WeChat (wechatbot SDK)](#5-wechat-wechatbot-sdk)
 6. [App URL](#6-app-url)
 7. [Итоговый .env.local](#7-итоговый-envlocal)
 
@@ -202,7 +202,13 @@ NEXT_PUBLIC_APP_URL=
 
 ## 7. Итоговый .env.local
 
-После получения всех ключей ваш `.env.local` должен выглядеть так:
+После получения всех ключей скопируйте `.env.local.example` в `.env.local` и заполните реальными значениями:
+
+```bash
+cp .env.local.example .env.local
+```
+
+Пример заполненного файла:
 
 ```env
 ```env
@@ -235,10 +241,9 @@ NEXT_PUBLIC_APP_URL=https://zapchasti.timeweb.app
 - [ ] Telegram бот создан через @BotFather
 - [ ] Webhook зарегистрирован через `setWebhook`
 - [ ] DeepSeek аккаунт пополнен
-- [ ] Первый поставщик подключён через QR в админке (WeChat SDK, ключи не нужны)
 - [ ] `.env.local` заполнен реальными значениями
 - [ ] Приложение задеплоено на Timeweb
-- [ ] Первый поставщик подключён через QR в админке
+- [ ] Первый поставщик подключён через QR в админке (WeChat SDK, ключи не нужны)
 - [ ] Первый оператор создан через Supabase Studio → Authentication → Users
 
 ---

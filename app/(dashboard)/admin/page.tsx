@@ -232,9 +232,24 @@ function SuppliersTab() {
 // ============================================================
 // Template Tab
 // ============================================================
+const DEFAULT_SCHEMA = {
+  fields: [
+    { key: 'brand', label: 'Марка автомобиля', description: 'Марка автомобиля (Toyota, BMW, Mercedes и т.д.)', required: true, type: 'text' },
+    { key: 'model', label: 'Модель', description: 'Модель автомобиля (Camry, X5, E-Class и т.д.)', required: true, type: 'text' },
+    { key: 'year', label: 'Год выпуска', description: 'Год выпуска автомобиля', required: true, type: 'text' },
+    { key: 'vin', label: 'VIN-номер', description: 'VIN-номер автомобиля (17 символов)', required: false, type: 'text' },
+    { key: 'part', label: 'Запчасть', description: 'Название нужной запчасти', required: true, type: 'text' },
+    { key: 'condition', label: 'Состояние', description: 'Новая или б/у запчасть', required: false, type: 'select', options: ['новая', 'б/у', 'любое'] },
+    { key: 'budget', label: 'Бюджет', description: 'Максимальный бюджет в рублях', required: false, type: 'text' },
+    { key: 'urgency', label: 'Срочность', description: 'Как срочно нужна запчасть', required: false, type: 'select', options: ['срочно', 'в течение недели', 'не срочно'] },
+    { key: 'city', label: 'Город', description: 'Город доставки', required: false, type: 'text' },
+    { key: 'notes', label: 'Дополнительно', description: 'Любые дополнительные сведения', required: false, type: 'text' },
+  ],
+};
+
 function TemplateTab() {
   const [template, setTemplate] = useState<DbTemplate | null>(null);
-  const [schemaText, setSchemaText] = useState('');
+  const [schemaText, setSchemaText] = useState(JSON.stringify(DEFAULT_SCHEMA, null, 2));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -243,9 +258,13 @@ function TemplateTab() {
     fetch('/api/admin/template')
       .then((r) => r.json())
       .then((json: { data: DbTemplate }) => {
-        setTemplate(json.data);
-        setSchemaText(JSON.stringify(json.data?.schema, null, 2));
-      });
+        if (json.data?.schema) {
+          setTemplate(json.data);
+          setSchemaText(JSON.stringify(json.data.schema, null, 2));
+        }
+        // если Supabase недоступен или шаблона нет — остаётся дефолтный
+      })
+      .catch(() => { /* оставляем дефолтный шаблон */ });
   }, []);
 
   async function handleSave() {
@@ -313,11 +332,10 @@ function TemplateTab() {
 // ============================================================
 function ApiKeysTab() {
   const [deepseekKey, setDeepseekKey] = useState('');
-  const [ilinkKey, setIlinkKey] = useState('');
   const [saving, setSaving] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
 
-  async function handleSaveKey(service: 'deepseek' | 'ilink', key: string) {
+  async function handleSaveKey(service: 'deepseek', key: string) {
     setSaving(service);
     await fetch('/api/admin/keys', {
       method: 'PUT',
@@ -358,25 +376,16 @@ function ApiKeysTab() {
           </div>
         </div>
 
-        {/* iLink */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="font-medium text-gray-900 mb-4">iLink Bot API (WeChat)</h3>
-          <div className="flex gap-3">
-            <input
-              type="password"
-              value={ilinkKey}
-              onChange={(e) => setIlinkKey(e.target.value)}
-              placeholder="ilink_..."
-              className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              onClick={() => handleSaveKey('ilink', ilinkKey)}
-              disabled={!ilinkKey || saving === 'ilink'}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-            >
-              {saving === 'ilink' ? 'Сохранение...' : saved === 'ilink' ? '✅ Сохранено' : 'Сохранить'}
-            </button>
-          </div>
+        {/* WeChat info */}
+        <div className="bg-blue-50 rounded-xl border border-blue-100 p-6">
+          <h3 className="font-medium text-gray-900 mb-2">WeChat (wechatbot SDK)</h3>
+          <p className="text-sm text-gray-600">
+            API-ключи для WeChat не нужны. Авторизация происходит через QR-код в разделе{' '}
+            <strong>Поставщики → Добавить поставщика</strong>.
+          </p>
+          <p className="text-xs text-gray-400 mt-2">
+            Сессии сохраняются локально в <code>~/.wechatbot/</code> и восстанавливаются при перезапуске.
+          </p>
         </div>
       </div>
     </div>

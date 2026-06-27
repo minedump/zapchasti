@@ -29,7 +29,6 @@
     "date-fns": "^3.6.0",
     "grammy": "^1.27.0",
     "inngest": "^3.19.14",
-    "@wechatbot/wechatbot": "latest",
     "lucide-react": "^0.400.0",
     "next": "14.2.5",
     "openai": "^4.52.7",
