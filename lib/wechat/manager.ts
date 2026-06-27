@@ -106,22 +106,27 @@ export async function startSupplierBot(
       }
     });
 
-  bot.onMessage(async (msg) => {
-    const text = msg.text || '[media]';
-    console.log(`[WeChatManager][${supplierName}] ${msg.userId}: ${text}`);
-    if (globalMessageCallback) {
-      await globalMessageCallback(supplierId, msg.userId, text, msg.raw);
-    }
-  });
+    bot.onMessage(async (msg) => {
+      const text = msg.text || '[media]';
+      console.log(`[WeChatManager][${supplierName}] ${msg.userId}: ${text}`);
+      if (globalMessageCallback) {
+        await globalMessageCallback(supplierId, msg.userId, text, msg.raw);
+      }
+    });
 
-  // Start the bot in background
-  bot.run().catch(err => {
-    console.error(`[WeChatManager] Failed to run bot for ${supplierName}:`, err);
-    session.status = 'error';
-    updateDbStatus(supplierId, 'error');
-  });
+    // Start the bot in background
+    bot.run().catch(err => {
+      console.error(`[WeChatManager] Failed to run bot for ${supplierName}:`, err);
+      session.status = 'error';
+      updateDbStatus(supplierId, 'error');
+    });
 
-  return session;
+    return session;
+  } catch (error) {
+    console.error(`[WeChatManager] Error initializing bot for ${supplierName}:`, error);
+    sessions.delete(supplierId);
+    throw error;
+  }
 }
 
 /**
