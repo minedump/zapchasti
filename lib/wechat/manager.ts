@@ -76,24 +76,29 @@ export function startSupplierBot(
       storage: 'file',
       storageDir: path.join(supplierStorageDir, 'creds.json'),
       logLevel: 'info',
-      onQrUrl: (url: string) => {
-        console.log(`[WeChat][${supplierName}] QR URL received: ${url}`);
-        session.qrUrl = url;
-        session.status = 'pending_qr';
-        onQrUrl(url);
-        // Resolve as soon as QR is ready — caller can display it immediately
-        if (!resolved) {
-          resolved = true;
-          resolve(session);
-        }
-      },
-      onScanned: () => {
-        console.log(`[WeChat] ${supplierName} scanned QR`);
-      },
-      onExpired: () => {
-        session.status = 'expired';
-        console.log(`[WeChat] ${supplierName} session expired`);
-      },
+    });
+
+    // Register event handlers
+    bot.on('qr', (url: string) => {
+      console.log(`[WeChat][${supplierName}] QR URL received: ${url}`);
+      session.qrUrl = url;
+      session.status = 'pending_qr';
+    });
+
+    bot.on('login', (user: any) => {
+      console.log(`[WeChat][${supplierName}] Logged in as: ${user.name()}`);
+      session.status = 'online';
+      session.qrUrl = undefined;
+    });
+
+    bot.on('logout', () => {
+      console.log(`[WeChat][${supplierName}] Logged out`);
+      session.status = 'offline';
+    });
+
+    bot.on('error', (error: Error) => {
+      console.error(`[WeChat][${supplierName}] Bot error:`, error);
+      session.status = 'error';
     });
 
     session.bot = bot;
