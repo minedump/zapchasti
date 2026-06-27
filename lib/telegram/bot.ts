@@ -1,5 +1,6 @@
 // Telegram Bot via grammY
-import { Bot, webhookCallback } from 'grammy';
+import { Bot } from 'grammy';
+import { SocksProxyAgent } from 'socks-proxy-agent';
 
 let botInstance: Bot | null = null;
 
@@ -7,7 +8,24 @@ export function getBot(): Bot {
   if (!botInstance) {
     const token = process.env.TELEGRAM_BOT_TOKEN;
     if (!token) throw new Error('TELEGRAM_BOT_TOKEN is not set');
-    botInstance = new Bot(token);
+
+    // Proxy configuration
+    const proxyHost = '194.154.27.85';
+    const proxyPort = 7363;
+    const proxyUser = 'v67D36pJ2mwKx';
+    const proxyPass = 'tbs3915Y5ZCNK';
+    
+    const proxyUrl = `socks5://${proxyUser}:${proxyPass}@${proxyHost}:${proxyPort}`;
+    const agent = new SocksProxyAgent(proxyUrl);
+
+    botInstance = new Bot(token, {
+      client: {
+        baseFetchConfig: {
+          agent,
+          compress: true,
+        },
+      },
+    });
   }
   return botInstance;
 }

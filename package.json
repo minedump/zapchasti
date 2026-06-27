@@ -28,12 +28,14 @@
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "grammy": "^1.27.0",
+    "https-proxy-agent": "^9.1.0",
     "inngest": "^3.19.14",
     "lucide-react": "^0.400.0",
     "next": "14.2.5",
     "openai": "^4.52.7",
     "react": "^18",
     "react-dom": "^18",
+    "socks-proxy-agent": "^10.1.0",
     "tailwind-merge": "^2.4.0"
   },
   "devDependencies": {
