@@ -44,7 +44,8 @@ export async function startSupplierBot(
 ): Promise<BotSession> {
   // If already running — return existing
   const existing = sessions.get(supplierId);
-  if (existing && (existing.status === 'active' || existing.status === 'online')) {
+  if (existing && (existing.status === 'active' || existing.status === 'online' || existing.status === 'pending_qr')) {
+    console.log(`[WeChatManager] Bot for ${supplierName} is already in state: ${existing.status}`);
     return existing;
   }
 
