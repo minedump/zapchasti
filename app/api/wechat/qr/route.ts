@@ -1,104 +1,34 @@
-/**
- * POST /api/wechat/qr
- * Create a new supplier record and start a bot session.
- * The bot will show a QR URL — supplier scans it in WeChat.
- * No API keys needed — auth happens via QR scan.
- */
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { startSupplierBot } from '@/lib/wechat/manager';
+import { generateAndSaveQR } from '@/lib/wechat/manager';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = await req.json() as { supplierName?: string; brands?: string[]; supplierId?: string };
-  const { supplierName, brands, supplierId } = body;
+    const body = await req.json() as { supplierId: string };
+    const { supplierId } = body;
 
-  const serviceSupabase = createServiceClient();
-  let supplier: any;
-
-  if (supplierId) {
-    // Use existing supplier
-    const { data, error } = await serviceSupabase
+    const serviceSupabase = createServiceClient();
+    const { data: supplier } = await serviceSupabase
       .from('suppliers')
-      .select('*')
+      .select('name')
       .eq('id', supplierId)
       .single();
-    
-    if (error || !data) {
-      return NextResponse.json({ error: 'Supplier not found' }, { status: 404 });
-    }
-    supplier = data;
-  } else {
-    // Create supplier record first to get an ID
-    if (!supplierName) return NextResponse.json({ error: 'Supplier name is required' }, { status: 400 });
-    
-    const { data, error } = await serviceSupabase
-      .from('suppliers')
-      .insert({
-        name: supplierName,
-        brands: (brands || []).map((b) => b.toLowerCase()),
-        session_status: 'inactive',
-      })
-      .select()
-      .single();
 
-    if (error || !data) {
-      return NextResponse.json({ error: error?.message || 'Failed to create supplier' }, { status: 500 });
-    }
-    supplier = data;
+    if (!supplier) return NextResponse.json({ error: 'Supplier not found' }, { status: 404 });
+
+    // Запускаем процесс получения QR (он сам сохранит в БД)
+    // Мы не ждем завершения здесь, чтобы не вешать HTTP запрос
+    generateAndSaveQR(supplierId, supplier.name).catch(console.error);
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
-
-  const onActive = async (wechatUserId: string) => {
-    await serviceSupabase
-      .from('suppliers')
-      .update({
-        session_status: 'active',
-        session_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      })
-      .eq('id', supplier.id);
-
-    const { data: chat } = await serviceSupabase
-      .from('chats')
-      .upsert(
-        {
-          chat_type: 'wechat',
-          external_id: wechatUserId,
-          last_message_at: new Date().toISOString(),
-        },
-        { onConflict: 'chat_type,external_id' }
-      )
-      .select()
-      .single();
-
-    if (chat) {
-      await serviceSupabase
-        .from('suppliers')
-        .update({ chat_id: chat.id })
-        .eq('id', supplier.id);
-    }
-  };
-
-  // Start the bot in the background
-  console.log(`[API/QR] Triggering bot start for supplier: ${supplier.name} (${supplier.id})`);
-  startSupplierBot(
-    supplier.id,
-    supplier.name,
-    (url) => console.log(`[API/QR] Callback: QR URL ready for ${supplier.name}: ${url}`),
-    onActive
-  ).then(() => {
-    console.log(`[API/QR] Bot initialization call finished for ${supplier.name}`);
-  }).catch(err => {
-    console.error(`[API/QR] CRITICAL: Failed to start bot for ${supplier.name}:`, err);
-  });
-
-  return NextResponse.json({
-    supplierId: supplier.id,
-    message: 'Supplier created successfully'
-  });
 }

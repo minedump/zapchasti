@@ -156,6 +156,7 @@ function SuppliersTab() {
     setActiveSupplierId(id);
     
     try {
+      // 1. Запускаем процесс генерации на сервере
       const res = await fetch('/api/wechat/qr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -163,14 +164,12 @@ function SuppliersTab() {
       });
       
       if (res.ok) {
+        // 2. Начинаем опрашивать статус (БД)
         setPollingId(id);
       } else {
-        const err = await res.json();
-        console.error('Failed to start bot:', err.error);
         setGenerating(null);
       }
     } catch (e) {
-      console.error('Error generating QR:', e);
       setGenerating(null);
     }
   }
