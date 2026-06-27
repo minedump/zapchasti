@@ -1,4 +1,4 @@
-﻿﻿﻿﻿import { WeChatBot } from '@wechatbot/wechatbot';
+﻿﻿﻿﻿﻿import { WeChatBot } from '@wechatbot/wechatbot';
 import path from 'path';
 import os from 'os';
 import { createServiceClient } from '../supabase/service';
@@ -40,34 +40,43 @@ export async function generateAndSaveQR(supplierId: string, supplierName: string
     };
 
     const bot = new WeChatBot({
-      storageDir: `./.wechatbot/temp_${supplierId}`,
-      loginCallbacks: {
-        onQrUrl: async (url: string) => {
-          console.log(`[WeChat] SUCCESS (onQrUrl): Got URL: ${url}`);
-          await save(url);
-        }
+      storageDir: `./.wechatbot/temp_${supplierId}`
+    });
+
+    const callbacks = {
+      onQrUrl: async (url: string) => {
+        console.log(`[WeChat] SUCCESS (onQrUrl): ${url}`);
+        await save(url);
+      },
+      onScan: async (url: string) => {
+        console.log(`[WeChat] SUCCESS (onScan): ${url}`);
+        await save(url);
+      },
+      // @ts-ignore
+      qr: async (url: string) => {
+        console.log(`[WeChat] SUCCESS (qr): ${url}`);
+        await save(url);
       }
-    });
+    };
 
-    // Listen to events as well, as callbacks might be unreliable in this SDK version
+    // Listen to events as well
     // @ts-ignore
-    bot.on('qr', async (url: string) => {
-      console.log(`[WeChat] SUCCESS (event qr): Got URL: ${url}`);
-      await save(url);
-    });
-
+    bot.on('qr', callbacks.qr);
     // @ts-ignore
-    bot.on('qrUrl', async (url: string) => {
-      console.log(`[WeChat] SUCCESS (event qrUrl): Got URL: ${url}`);
-      await save(url);
-    });
+    bot.on('qrUrl', callbacks.onQrUrl);
+    // @ts-ignore
+    bot.on('scan', callbacks.onScan);
 
     const timeout = setTimeout(() => {
       bot.stop();
       reject(new Error('Timeout getting QR from WeChat'));
     }, 60000);
 
-    bot.login().catch(err => {
+    // Pass callbacks directly to login()
+    bot.login({ 
+      // @ts-ignore
+      callbacks 
+    }).catch(err => {
       clearTimeout(timeout);
       bot.stop();
       reject(err);
