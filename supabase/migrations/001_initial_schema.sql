@@ -199,17 +199,18 @@ CREATE POLICY "service_role_all_history" ON public.deal_status_history
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.suppliers (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
-  chat_id UUID REFERENCES public.chats(id) ON DELETE SET NULL,
   name VARCHAR(255) NOT NULL,
-  brands TEXT[] NOT NULL DEFAULT '{}',
-  session_id VARCHAR(255),
+  contact_info TEXT,
+  user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  wechat_user_id VARCHAR(255),
+  qr_url TEXT,
   session_status VARCHAR(50) NOT NULL DEFAULT 'inactive'
     CHECK (session_status IN ('active', 'expiring', 'inactive', 'pending_qr', 'scanned', 'error', 'online', 'offline')),
+  session_data JSONB,
   session_expires_at TIMESTAMPTZ,
-  qr_url TEXT,
-  wechat_user_id VARCHAR(255),
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  chat_id UUID REFERENCES public.chats(id) ON DELETE SET NULL,
+  brands TEXT[] NOT NULL DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

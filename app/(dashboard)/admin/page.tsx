@@ -91,10 +91,10 @@ function SuppliersTab() {
         if (json.qrUrl) {
           setQrCode(json.qrUrl);
           setActiveSupplierId(pollingId);
-          setGenerating(null);
+          // Не сбрасываем setGenerating(null), чтобы иконка крутилась до логина
         }
 
-        if (json.status === 'online' || json.status === 'active') {
+        if (json.status === 'active' || json.status === 'online') {
           setQrCode(null);
           setPollingId(null);
           setGenerating(null);
