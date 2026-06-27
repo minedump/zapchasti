@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { buildQuestionnairePrompt } from '@/lib/deepseek/client';
 import type { TemplateField } from '@/lib/types';
 
@@ -8,7 +8,8 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data, error } = await supabase
+  const serviceSupabase = createServiceClient();
+  const { data, error } = await serviceSupabase
     .from('templates')
     .select('*')
     .eq('is_active', true)
@@ -24,11 +25,12 @@ export async function PUT(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const serviceSupabase = createServiceClient();
   const body = await req.json() as { schema: { fields: TemplateField[] } };
   const { schema } = body;
 
   // Get current version
-  const { data: current } = await supabase
+  const { data: current } = await serviceSupabase
     .from('templates')
     .select('version')
     .eq('is_active', true)
@@ -40,13 +42,13 @@ export async function PUT(req: NextRequest) {
   const prompt = buildQuestionnairePrompt(schema.fields);
 
   // Deactivate old template
-  await supabase
+  await serviceSupabase
     .from('templates')
     .update({ is_active: false })
     .eq('is_active', true);
 
   // Create new template
-  const { data, error } = await supabase
+  const { data, error } = await serviceSupabase
     .from('templates')
     .insert({
       version: newVersion,
