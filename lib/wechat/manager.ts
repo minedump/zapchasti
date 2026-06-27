@@ -76,29 +76,43 @@ export function startSupplierBot(
       storage: 'file',
       storageDir: path.join(supplierStorageDir, 'creds.json'),
       logLevel: 'info',
+      loginCallbacks: {
+        onQrUrl: (url: string) => {
+          console.log(`[WeChat][${supplierName}] QR URL received: ${url}`);
+          session.qrUrl = url;
+          session.status = 'pending_qr';
+        },
+        onScanned: () => {
+          console.log(`[WeChat][${supplierName}] QR Scanned, awaiting confirmation`);
+          session.status = 'scanned';
+        },
+        onExpired: () => {
+          console.log(`[WeChat][${supplierName}] QR Expired`);
+          session.status = 'expired';
+        }
+      }
     });
 
     // Register event handlers
-    bot.on('qr', (url: string) => {
-      console.log(`[WeChat][${supplierName}] QR URL received: ${url}`);
-      session.qrUrl = url;
-      session.status = 'pending_qr';
-    });
-
-    bot.on('login', (user: any) => {
-      console.log(`[WeChat][${supplierName}] Logged in as: ${user.name()}`);
+    bot.on('login', (creds: any) => {
+      console.log(`[WeChat][${supplierName}] Logged in, account: ${creds.accountId}`);
       session.status = 'online';
       session.qrUrl = undefined;
     });
 
-    bot.on('logout', () => {
-      console.log(`[WeChat][${supplierName}] Logged out`);
+    bot.on('session:expired', () => {
+      console.log(`[WeChat][${supplierName}] Session expired`);
       session.status = 'offline';
     });
 
-    bot.on('error', (error: Error) => {
+    bot.on('error', (error: any) => {
       console.error(`[WeChat][${supplierName}] Bot error:`, error);
       session.status = 'error';
+    });
+
+    bot.on('close', () => {
+      console.log(`[WeChat][${supplierName}] Bot closed`);
+      session.status = 'offline';
     });
 
     session.bot = bot;
