@@ -36,16 +36,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error?.message || 'Failed to create supplier' }, { status: 500 });
   }
 
-  let qrUrl: string | null = null;
-
   try {
-    // Start bot — will show QR since no saved credentials
-    const session = await startSupplierBot(
-      supplier.id,
-      supplierName,
-      (url) => { qrUrl = url; },
-      async (wechatUserId) => {
-        // On successful scan — update supplier with WeChat user ID
+    // Wait for QR URL to be emitted (fires quickly — before scan).
+    // startSupplierBot returns immediately; login + poll run in background.
+    const qrUrl = await new Promise<string | null>((resolve) => {
+      const timer = setTimeout(() => resolve(null), 15000);
+
+      const onActive = async (wechatUserId: string) => {
+        // On successful scan — update supplier record
         await serviceSupabase
           .from('suppliers')
           .update({
@@ -74,14 +72,28 @@ export async function POST(req: NextRequest) {
             .update({ chat_id: chat.id })
             .eq('id', supplier.id);
         }
-      }
-    );
+      };
+
+      // startSupplierBot now returns immediately after registering handlers.
+      // The bot login loop runs in background; onQrUrl fires within ~1-2s.
+      startSupplierBot(
+        supplier.id,
+        supplierName,
+        (url) => {
+          clearTimeout(timer);
+          resolve(url);
+        },
+        onActive
+      ).catch((err: Error) => {
+        clearTimeout(timer);
+        console.error('[WeChat] startSupplierBot error:', err);
+        resolve(null);
+      });
+    });
 
     return NextResponse.json({
       supplierId: supplier.id,
-      status: session.status,
-      // qrUrl is a URL to a QR image — display it in the admin UI
-      qrUrl: session.qrUrl,
+      qrCode: qrUrl,
     });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

@@ -61,9 +61,12 @@ export async function startSupplierBot(
     wechatUserId: null,
   };
 
+  // Each supplier gets its own storage directory so credentials don't collide
+  const supplierStorageDir = path.join(os.homedir(), '.wechatbot', supplierId);
+
   const bot = new WeChatBot({
     storage: 'file',
-    storageDir: path.join(os.homedir(), '.wechatbot'),
+    storageDir: supplierStorageDir,
     logLevel: 'info',
     loginCallbacks: {
       onQrUrl: (url: string) => {
@@ -94,17 +97,23 @@ export async function startSupplierBot(
     }
   });
 
-  // Login (uses stored creds if available, otherwise shows QR)
-  const creds = await bot.login();
-  session.wechatUserId = creds.accountId ?? null;
-  session.status = 'active';
-  onActive(creds.accountId ?? '');
+  // Login then start long-poll — both run in background.
+  // onQrUrl fires during login() before it resolves, so the caller
+  // can capture the QR URL without waiting for the scan.
+  (async () => {
+    try {
+      const creds = await bot.login();
+      session.wechatUserId = creds.accountId ?? null;
+      session.status = 'active';
+      onActive(creds.accountId ?? '');
 
-  // Start long-poll in background (non-blocking)
-  bot.start().catch((err: Error) => {
-    console.error(`[WeChat][${supplierName}] poll error:`, err);
-    session.status = 'expired';
-  });
+      // Start long-poll loop (runs until bot.stop())
+      await bot.start();
+    } catch (err) {
+      console.error(`[WeChat][${supplierName}] bot error:`, err);
+      session.status = 'expired';
+    }
+  })();
 
   return session;
 }

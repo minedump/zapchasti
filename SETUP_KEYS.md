@@ -10,9 +10,8 @@
 2. [Telegram Bot Token](#2-telegram-bot-token)
 3. [Telegram Webhook Secret](#3-telegram-webhook-secret)
 4. [DeepSeek API Key](#4-deepseek-api-key)
-5. [WeChat (wechatbot SDK)](#5-wechat-wechatbot-sdk)
-6. [App URL](#6-app-url)
-7. [Итоговый .env.local](#7-итоговый-envlocal)
+5. [App URL](#5-app-url)
+6. [Итоговый .env.local](#6-итоговый-envlocal)
 
 ---
 
@@ -160,33 +159,7 @@ sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ---
 
-## 5. WeChat (wechatbot SDK)
-
-```
-# Ключей нет — авторизация через QR-код!
-```
-
-**WeChat работает через SDK `@wechatbot/wechatbot` — никаких API-ключей не нужно.**
-
-Авторизация происходит так:
-1. В веб-админке нажмите **Администрирование → Поставщики → Добавить поставщика**
-2. Введите имя поставщика и его профильные марки
-3. Система запустит бота и покажет **QR-код** (ссылку на изображение)
-4. Поставщик сканирует QR-код в WeChat
-5. После сканирования бот автоматически начинает принимать сообщения
-6. Сессия сохраняется в файл `~/.wechatbot/<supplierId>.json` и восстанавливается при перезапуске
-
-**Как работает под капотом:**
-- SDK использует iLink Bot API (протокол WeChat)
-- Авторизация — QR-код → токен сохраняется локально
-- Сообщения получаются через **long-polling** (не webhook)
-- Каждый поставщик = отдельный экземпляр бота со своим файлом сессии
-
-> Документация SDK: https://www.wechatbot.dev/en/nodejs
-
----
-
-## 6. App URL
+## 5. App URL
 
 ```
 NEXT_PUBLIC_APP_URL=
@@ -200,7 +173,7 @@ NEXT_PUBLIC_APP_URL=
 
 ---
 
-## 7. Итоговый .env.local
+## 6. Итоговый .env.local
 
 После получения всех ключей скопируйте `.env.local.example` в `.env.local` и заполните реальными значениями:
 
@@ -224,8 +197,6 @@ TELEGRAM_WEBHOOK_SECRET=a3f8c2d1e4b5f6a7b8c9d0e1f2a3b4c5
 # DeepSeek
 DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 DEEPSEEK_BASE_URL=https://api.deepseek.com
-
-# WeChat — ключей нет, авторизация через QR в админке
 
 # App
 NEXT_PUBLIC_APP_URL=https://zapchasti.timeweb.app

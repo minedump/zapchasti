@@ -350,10 +350,6 @@ function ApiKeysTab() {
   return (
     <div className="space-y-6">
       <h2 className="font-semibold text-gray-900">API-ключи</h2>
-      <p className="text-sm text-gray-500">
-        Ключи хранятся в зашифрованном виде в Supabase. Для продакшена рекомендуется использовать переменные окружения.
-      </p>
-
       <div className="space-y-4">
         {/* DeepSeek */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -376,17 +372,6 @@ function ApiKeysTab() {
           </div>
         </div>
 
-        {/* WeChat info */}
-        <div className="bg-blue-50 rounded-xl border border-blue-100 p-6">
-          <h3 className="font-medium text-gray-900 mb-2">WeChat (wechatbot SDK)</h3>
-          <p className="text-sm text-gray-600">
-            API-ключи для WeChat не нужны. Авторизация происходит через QR-код в разделе{' '}
-            <strong>Поставщики → Добавить поставщика</strong>.
-          </p>
-          <p className="text-xs text-gray-400 mt-2">
-            Сессии сохраняются локально в <code>~/.wechatbot/</code> и восстанавливаются при перезапуске.
-          </p>
-        </div>
       </div>
     </div>
   );
