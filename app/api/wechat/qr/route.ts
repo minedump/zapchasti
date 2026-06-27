@@ -66,22 +66,8 @@ export async function POST(req: NextRequest) {
     }
   };
 
-  try {
-    // startSupplierBot resolves as soon as QR URL is ready (or creds restored).
-    // Login + long-poll continue running in the background.
-    const session = await startSupplierBot(
-      supplier.id,
-      supplierName,
-      () => {}, // onQrUrl stored in session.qrUrl
-      onActive
-    );
-
-    return NextResponse.json({
-      supplierId: supplier.id,
-      qrCode: session.qrUrl,
-    });
-  } catch (err) {
-    console.error('[WeChat] startSupplierBot failed:', err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
-  }
+  return NextResponse.json({
+    supplierId: supplier.id,
+    message: 'Supplier created successfully'
+  });
 }

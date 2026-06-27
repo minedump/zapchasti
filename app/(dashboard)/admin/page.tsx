@@ -15,6 +15,7 @@ import {
   Users,
   FileText,
   Key,
+  QrCode,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/helpers';
 
@@ -73,7 +74,9 @@ function SuppliersTab() {
   const [newName, setNewName] = useState('');
   const [newBrands, setNewBrands] = useState('');
   const [qrCode, setQrCode] = useState<string | null>(null);
+  const [activeSupplierId, setActiveSupplierId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [generating, setGenerating] = useState<string | null>(null);
 
   async function fetchSuppliers() {
     setLoading(true);
@@ -89,15 +92,30 @@ function SuppliersTab() {
     if (!newName.trim()) return;
     setAdding(true);
     const brands = newBrands.split(',').map((b) => b.trim()).filter(Boolean);
-    const res = await fetch('/api/wechat/qr', {
+    await fetch('/api/wechat/qr', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ supplierName: newName, brands }),
     });
-    const json = await res.json() as { qrCode: string };
-    setQrCode(json.qrCode);
     setAdding(false);
+    setNewName('');
+    setNewBrands('');
+    setShowAdd(false);
     fetchSuppliers();
+  }
+
+  async function handleGenerateQR(id: string) {
+    setGenerating(id);
+    setQrCode(null);
+    setActiveSupplierId(id);
+    try {
+      const res = await fetch(`/api/wechat/qr/${id}`, { method: 'POST' });
+      const json = await res.json() as { qrCode: string };
+      setQrCode(json.qrCode);
+    } catch (e) {
+      console.error(e);
+    }
+    setGenerating(null);
   }
 
   const sessionIcon = (status: SessionStatus) => {
@@ -156,21 +174,59 @@ function SuppliersTab() {
               />
             </div>
           </div>
-          <button
-            onClick={handleAddSupplier}
-            disabled={!newName.trim() || adding}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-          >
-            {adding ? 'Генерация QR...' : 'Сгенерировать QR-код'}
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={handleAddSupplier}
+              disabled={!newName.trim() || adding}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            >
+              {adding ? 'Сохранение...' : 'Создать поставщика'}
+            </button>
+            <button
+              onClick={() => setShowAdd(false)}
+              className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200"
+            >
+              Отмена
+            </button>
+          </div>
+        </div>
+      )}
 
-          {qrCode && (
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg text-center">
-              <p className="text-sm text-gray-600 mb-3">Попросите поставщика отсканировать QR-код в WeChat:</p>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={qrCode} alt="QR Code" className="mx-auto w-48 h-48" />
+      {/* QR Display Area */}
+      {qrCode && (
+        <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 text-center animate-in fade-in slide-in-from-top-4">
+          <div className="flex justify-between items-start mb-4">
+            <h3 className="font-medium text-blue-900">QR-код для {suppliers.find(s => s.id === activeSupplierId)?.name}</h3>
+            <button onClick={() => setQrCode(null)} className="text-blue-400 hover:text-blue-600">
+              <XCircle className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="bg-white p-4 inline-block rounded-2xl shadow-sm border border-blue-100">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img 
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrCode)}`} 
+              alt="QR Code" 
+              className="w-64 h-64"
+            />
+          </div>
+          <div className="mt-4 space-y-2">
+            <p className="text-sm text-blue-700">Отправьте эту ссылку поставщику или дайте отсканировать:</p>
+            <div className="flex gap-2 max-w-md mx-auto">
+              <input 
+                readOnly 
+                value={qrCode} 
+                className="flex-1 text-xs bg-white border border-blue-200 rounded-lg px-3 py-2 text-blue-600"
+              />
+              <button 
+                onClick={() => navigator.clipboard.writeText(qrCode)}
+                className="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700"
+              >
+                Копировать
+              </button>
             </div>
-          )}
+          </div>
+        </div>
+      )}
         </div>
       )}
 
@@ -189,6 +245,7 @@ function SuppliersTab() {
                 <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Сессия</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Истекает</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Статус</th>
+                <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -218,6 +275,23 @@ function SuppliersTab() {
                     )}>
                       {s.is_active ? 'Активен' : 'Отключен'}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <button
+                      onClick={() => handleGenerateQR(s.id)}
+                      disabled={generating === s.id}
+                      className={cn(
+                        "p-2 rounded-lg transition-colors",
+                        generating === s.id ? "bg-gray-100 text-gray-400" : "hover:bg-blue-50 text-blue-600"
+                      )}
+                      title="Сгенерировать QR-код"
+                    >
+                      {generating === s.id ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <QrCode className="w-4 h-4" />
+                      )}
+                    </button>
                   </td>
                 </tr>
               ))}

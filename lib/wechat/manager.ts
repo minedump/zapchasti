@@ -74,23 +74,27 @@ export function startSupplierBot(
 
     const bot = new WeChatBot({
       storage: 'file',
-      storageDir: supplierStorageDir,
+      storageOptions: {
+        path: path.join(supplierStorageDir, 'creds.json'),
+      },
       logLevel: 'info',
-      loginCallbacks: {
-        onQrUrl: (url: string) => {
-          session.qrUrl = url;
-          session.status = 'pending_qr';
-          onQrUrl(url);
-          // Resolve as soon as QR is ready — caller can display it immediately
-          if (!resolved) { resolved = true; resolve(session); }
-        },
-        onScanned: () => {
-          console.log(`[WeChat] ${supplierName} scanned QR`);
-        },
-        onExpired: () => {
-          session.status = 'expired';
-          console.log(`[WeChat] ${supplierName} session expired`);
-        },
+      onQrUrl: (url: string) => {
+        console.log(`[WeChat][${supplierName}] QR URL received: ${url}`);
+        session.qrUrl = url;
+        session.status = 'pending_qr';
+        onQrUrl(url);
+        // Resolve as soon as QR is ready — caller can display it immediately
+        if (!resolved) {
+          resolved = true;
+          resolve(session);
+        }
+      },
+      onScanned: () => {
+        console.log(`[WeChat] ${supplierName} scanned QR`);
+      },
+      onExpired: () => {
+        session.status = 'expired';
+        console.log(`[WeChat] ${supplierName} session expired`);
       },
     });
 
@@ -106,10 +110,20 @@ export function startSupplierBot(
       }
     });
 
+    // Safety timeout: if no QR or login in 20s, resolve anyway so API doesn't hang
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        console.log(`[WeChat][${supplierName}] Login timeout reached, resolving with current state`);
+        resolved = true;
+        resolve(session);
+      }
+    }, 20000);
+
     // Run login + long-poll in background
     (async () => {
       try {
         const creds = await bot.login();
+        clearTimeout(timeout);
         session.wechatUserId = creds.accountId ?? null;
         session.status = 'active';
         // If creds were restored from disk (no QR shown), resolve here
@@ -117,6 +131,7 @@ export function startSupplierBot(
         onActive(creds.accountId ?? '');
         await bot.start();
       } catch (err) {
+        clearTimeout(timeout);
         console.error(`[WeChat][${supplierName}] bot error:`, err);
         session.status = 'expired';
         sessions.delete(supplierId);
