@@ -14,21 +14,20 @@ export type DealStatus =
   | 'found'
   | 'rejected'
   | 'closed';
-export type SessionStatus = 'active' | 'expiring' | 'inactive';
-export type LogLevel = 'info' | 'warning' | 'error' | 'debug';
-export type ApiService = 'deepseek' | 'ilink';
+export type SessionStatus = 'active' | 'expiring' | 'inactive' | 'pending_qr' | 'scanned' | 'error' | 'online' | 'offline';
 
-// ============================================================
-// Database Row Types
-// ============================================================
-
-export interface DbUser {
+export interface DbSupplier {
   id: string;
-  telegram_id: number | null;
-  wechat_id: string | null;
-  username: string | null;
-  display_name: string | null;
-  role: UserRole;
+  user_id: string | null;
+  chat_id: string | null;
+  name: string;
+  brands: string[];
+  session_id: string | null;
+  session_status: SessionStatus;
+  session_expires_at: string | null;
+  qr_url: string | null;
+  wechat_user_id: string | null;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }

@@ -105,7 +105,8 @@ export function startSupplierBot(
       console.log(`[WeChat][${supplierName}] Logged in, account: ${creds.accountId}`);
       session.status = 'online';
       session.qrUrl = null;
-      updateDbStatus(supplierId, 'active').catch(console.error);
+      session.wechatUserId = creds.accountId || null;
+      updateDbStatus(supplierId, 'active', null, creds.accountId).catch(console.error);
     });
 
     bot.on('session:expired', () => {
@@ -236,11 +237,12 @@ export function stopBot(supplierId: string): void {
   }
 }
 
-async function updateDbStatus(supplierId: string, status: string, qrUrl: string | null = null) {
+async function updateDbStatus(supplierId: string, status: string, qrUrl: string | null = undefined, wechatUserId: string | null = undefined) {
   try {
     const supabase = createServiceClient();
     const updateData: any = { session_status: status };
     if (qrUrl !== undefined) updateData.qr_url = qrUrl;
+    if (wechatUserId !== undefined) updateData.wechat_user_id = wechatUserId;
     
     await supabase
       .from('suppliers')
