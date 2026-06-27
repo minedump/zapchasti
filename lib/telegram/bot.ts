@@ -10,22 +10,27 @@ export function getBot(): Bot {
     if (!token) throw new Error('TELEGRAM_BOT_TOKEN is not set');
 
     // Proxy configuration
-    const proxyHost = '194.154.27.85';
-    const proxyPort = 7363;
-    const proxyUser = 'v67D36pJ2mwKx';
-    const proxyPass = 'tbs3915Y5ZCNK';
+    const proxyHost = process.env.TG_PROXY_HOST;
+    const proxyPort = process.env.TG_PROXY_PORT;
+    const proxyUser = process.env.TG_PROXY_USER;
+    const proxyPass = process.env.TG_PROXY_PASS;
     
-    const proxyUrl = `socks5://${proxyUser}:${proxyPass}@${proxyHost}:${proxyPort}`;
-    const agent = new SocksProxyAgent(proxyUrl);
+    if (proxyHost && proxyPort) {
+      const auth = proxyUser && proxyPass ? `${proxyUser}:${proxyPass}@` : '';
+      const proxyUrl = `socks5://${auth}${proxyHost}:${proxyPort}`;
+      const agent = new SocksProxyAgent(proxyUrl);
 
-    botInstance = new Bot(token, {
-      client: {
-        baseFetchConfig: {
-          agent,
-          compress: true,
+      botInstance = new Bot(token, {
+        client: {
+          baseFetchConfig: {
+            agent,
+            compress: true,
+          },
         },
-      },
-    });
+      });
+    } else {
+      botInstance = new Bot(token);
+    }
   }
   return botInstance;
 }
