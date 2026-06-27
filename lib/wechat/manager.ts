@@ -1,4 +1,4 @@
-﻿﻿/**
+﻿﻿﻿﻿/**
  * WeChat Bot Manager
  *
  * Manages multiple WeChatBot instances (one per supplier).
@@ -9,8 +9,6 @@ import { WeChatBot } from '@wechatbot/wechatbot';
 import path from 'path';
 import os from 'os';
 import { createServiceClient } from '../supabase/service';
-import { HttpsProxyAgent } from 'https-proxy-agent';
-import { SocksProxyAgent } from 'socks-proxy-agent';
 
 export interface BotSession {
   supplierId: string;
@@ -69,34 +67,21 @@ export async function startSupplierBot(
   };
 
   try {
-    const agent = proxy 
-      ? (proxy.startsWith('socks') ? new SocksProxyAgent(proxy) : new HttpsProxyAgent(proxy))
-      : undefined;
-
     const bot = new WeChatBot({
       storageDir: storagePath,
-      // @ts-ignore - Passing custom agent for proxy support
-      fetchOptions: agent ? {
-        agent,
-        timeout: 30000
-      } : {
-        timeout: 30000
-      },
       loginCallbacks: {
         onQrUrl: async (url: string) => {
-          console.log(`[WeChatManager] SUCCESS: QR URL received for ${supplierName}: ${url}`);
+          console.log(`[WeChatManager] QR URL: ${url}`);
           session.qrUrl = url;
           session.status = 'pending_qr';
           onQrUrl(url);
           await updateDbStatus(supplierId, 'pending_qr', url);
         },
         onScanned: async () => {
-          console.log(`[WeChatManager] INFO: QR Scanned for ${supplierName}`);
           session.status = 'scanned';
           await updateDbStatus(supplierId, 'scanned');
         },
         onExpired: async () => {
-          console.log(`[WeChatManager] WARN: QR Expired for ${supplierName}`);
           session.status = 'expired';
           session.qrUrl = null;
           await updateDbStatus(supplierId, 'inactive');
@@ -108,50 +93,23 @@ export async function startSupplierBot(
     sessions.set(supplierId, session);
 
     bot.on('login', async (creds) => {
-      console.log(`[WeChatManager] SUCCESS: Login complete for ${supplierName}. UserID: ${creds.userId}`);
+      console.log(`[WeChatManager] Login Success: ${supplierName}`);
       session.status = 'active';
-      session.qrUrl = null;
       session.wechatUserId = creds.userId;
       onActive(creds.userId);
       await updateDbStatus(supplierId, 'online', null, creds.userId);
     });
 
-    bot.onMessage(async (msg) => {
-      const text = msg.text || '[media]';
-      console.log(`[WeChatManager][${supplierName}] ${msg.userId}: ${text}`);
-      if (globalMessageCallback) {
-        await globalMessageCallback(supplierId, msg.userId, text, msg.raw);
-      }
+    // Start the bot in background - NO RETRIES, NO PROXY
+    bot.run().catch(err => {
+      console.error(`[WeChatManager] Bot ${supplierName} stopped:`, err?.message || err);
+      session.status = 'error';
+      updateDbStatus(supplierId, 'error');
     });
-
-    // Start the bot in background with retry logic
-    const startWithRetry = async (attempt = 1) => {
-      try {
-        console.log(`[WeChatManager] Running bot.run() for ${supplierName} (Attempt ${attempt})...`);
-        await bot.run();
-      } catch (err: any) {
-        const isNetworkError = err?.toString().includes('fetch failed') || 
-                               err?.code === 'EAI_AGAIN' || 
-                               err?.code === 'UND_ERR_CONNECT_TIMEOUT' ||
-                               err?.name === 'ConnectTimeoutError';
-        
-        if (isNetworkError && attempt <= 5) {
-          const delay = Math.pow(2, attempt) * 1000;
-          console.warn(`[WeChatManager] Network error for ${supplierName}. Retrying in ${delay}ms (Attempt ${attempt}/5)...`);
-          setTimeout(() => startWithRetry(attempt + 1), delay);
-        } else {
-          console.error(`[WeChatManager] Failed to run bot for ${supplierName} after ${attempt} attempts:`, err);
-          session.status = 'error';
-          updateDbStatus(supplierId, 'error');
-        }
-      }
-    };
-
-    startWithRetry();
 
     return session;
   } catch (error) {
-    console.error(`[WeChatManager] Error initializing bot for ${supplierName}:`, error);
+    console.error(`[WeChatManager] Init error:`, error);
     sessions.delete(supplierId);
     throw error;
   }
