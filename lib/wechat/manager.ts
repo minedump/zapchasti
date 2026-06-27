@@ -112,6 +112,12 @@ export function startSupplierBot(
     });
 
     bot.on('error', async (error: any) => {
+      // If it's just a timeout during QR generation but we HAVE a QR URL, don't kill the session
+      const isTimeout = error?.toString().includes('TimeoutError') || error?.name === 'TimeoutError';
+      if (isTimeout && session.qrUrl) {
+        console.log(`[WeChat][${supplierName}] Ignored TimeoutError because QR is already available`);
+        return;
+      }
       console.error(`[WeChat][${supplierName}] Bot error:`, error);
       session.status = 'error';
       await updateDbStatus(supplierId, 'error');
