@@ -80,7 +80,7 @@ export function startSupplierBot(
     const bot = new WeChatBot({
       storageDir: `./.wechatbot/${supplierId}`,
       loginCallbacks: {
-        onScan: async (url) => {
+        onQr: async (url) => {
           console.log(`[WeChatManager] QR Code received for ${supplierId}: ${url}`);
           await updateDbStatus(supplierId, 'pending_qr', url);
         },
