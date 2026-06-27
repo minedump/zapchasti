@@ -141,7 +141,29 @@ export async function startSupplierBot(
   // Start the bot in background with retry logic
   const startWithRetry = async (attempt = 1) => {
     try {
-      await bot.run();
+      console.log(`[WeChatManager] Running bot.run() for ${supplierName} (Attempt ${attempt})...`);
+      await bot.run({
+        callbacks: {
+          onQrUrl: async (url) => {
+            console.log(`[WeChatManager] SUCCESS (run callback): QR URL for ${supplierName}: ${url}`);
+            session.qrUrl = url;
+            session.status = 'pending_qr';
+            onQrUrl(url);
+            await updateDbStatus(supplierId, 'pending_qr', url);
+          },
+          onScanned: async () => {
+            console.log(`[WeChatManager] INFO (run callback): QR Scanned for ${supplierName}`);
+            session.status = 'scanned';
+            await updateDbStatus(supplierId, 'scanned');
+          },
+          onExpired: async () => {
+            console.log(`[WeChatManager] WARN (run callback): QR Expired for ${supplierName}`);
+            session.status = 'expired';
+            session.qrUrl = null;
+            await updateDbStatus(supplierId, 'inactive');
+          }
+        }
+      });
     } catch (err: any) {
       const isNetworkError = err?.toString().includes('fetch failed') || err?.code === 'EAI_AGAIN';
       
@@ -211,6 +233,7 @@ export function stopBot(supplierId: string): void {
 
 async function updateDbStatus(supplierId: string, status: string, qrUrl: string | null = null, wechatUserId: string | null = null) {
   try {
+    console.log(`[WeChatManager] Updating DB: supplier=${supplierId}, status=${status}, hasQr=${!!qrUrl}`);
     const supabase = createServiceClient();
     const updateData: any = { session_status: status };
     if (qrUrl !== null) updateData.qr_url = qrUrl;
