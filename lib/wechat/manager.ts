@@ -12,6 +12,7 @@
 import { WeChatBot } from '@wechatbot/wechatbot';
 import path from 'path';
 import os from 'os';
+import { createServiceClient } from '../supabase/service';
 
 export interface BotSession {
   supplierId: string;
@@ -77,37 +78,43 @@ export function startSupplierBot(
       storageDir: path.join(supplierStorageDir, 'creds.json'),
       logLevel: 'info',
       loginCallbacks: {
-        onQrUrl: (url: string) => {
+        onQrUrl: async (url: string) => {
           console.log(`[WeChat][${supplierName}] QR URL received: ${url}`);
           session.qrUrl = url;
           session.status = 'pending_qr';
+          await updateDbStatus(supplierId, 'pending_qr');
         },
-        onScanned: () => {
+        onScanned: async () => {
           console.log(`[WeChat][${supplierName}] QR Scanned, awaiting confirmation`);
           session.status = 'scanned';
+          await updateDbStatus(supplierId, 'scanned');
         },
-        onExpired: () => {
+        onExpired: async () => {
           console.log(`[WeChat][${supplierName}] QR Expired`);
           session.status = 'expired';
+          await updateDbStatus(supplierId, 'expired');
         }
       }
     });
 
     // Register event handlers
-    bot.on('login', (creds: any) => {
+    bot.on('login', async (creds: any) => {
       console.log(`[WeChat][${supplierName}] Logged in, account: ${creds.accountId}`);
       session.status = 'online';
       session.qrUrl = null;
+      await updateDbStatus(supplierId, 'active');
     });
 
-    bot.on('session:expired', () => {
+    bot.on('session:expired', async () => {
       console.log(`[WeChat][${supplierName}] Session expired`);
       session.status = 'offline';
+      await updateDbStatus(supplierId, 'inactive');
     });
 
-    bot.on('error', (error: any) => {
+    bot.on('error', async (error: any) => {
       console.error(`[WeChat][${supplierName}] Bot error:`, error);
       session.status = 'error';
+      await updateDbStatus(supplierId, 'error');
     });
 
     bot.on('close', () => {
@@ -205,5 +212,17 @@ export function stopBot(supplierId: string): void {
   if (session) {
     session.bot.stop();
     sessions.delete(supplierId);
+  }
+}
+
+async function updateDbStatus(supplierId: string, status: string) {
+  try {
+    const supabase = createServiceClient();
+    await supabase
+      .from('suppliers')
+      .update({ session_status: status })
+      .eq('id', supplierId);
+  } catch (err) {
+    console.error(`[WeChat][${supplierId}] Failed to update DB status:`, err);
   }
 }
