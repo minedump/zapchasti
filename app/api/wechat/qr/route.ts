@@ -16,24 +16,42 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = await req.json() as { supplierName: string; brands: string[] };
-  const { supplierName, brands } = body;
+  const body = await req.json() as { supplierName?: string; brands?: string[]; supplierId?: string };
+  const { supplierName, brands, supplierId } = body;
 
   const serviceSupabase = createServiceClient();
+  let supplier: any;
 
-  // Create supplier record first to get an ID
-  const { data: supplier, error } = await serviceSupabase
-    .from('suppliers')
-    .insert({
-      name: supplierName,
-      brands: brands.map((b) => b.toLowerCase()),
-      session_status: 'inactive',
-    })
-    .select()
-    .single();
+  if (supplierId) {
+    // Use existing supplier
+    const { data, error } = await serviceSupabase
+      .from('suppliers')
+      .select('*')
+      .eq('id', supplierId)
+      .single();
+    
+    if (error || !data) {
+      return NextResponse.json({ error: 'Supplier not found' }, { status: 404 });
+    }
+    supplier = data;
+  } else {
+    // Create supplier record first to get an ID
+    if (!supplierName) return NextResponse.json({ error: 'Supplier name is required' }, { status: 400 });
+    
+    const { data, error } = await serviceSupabase
+      .from('suppliers')
+      .insert({
+        name: supplierName,
+        brands: (brands || []).map((b) => b.toLowerCase()),
+        session_status: 'inactive',
+      })
+      .select()
+      .single();
 
-  if (error || !supplier) {
-    return NextResponse.json({ error: error?.message || 'Failed to create supplier' }, { status: 500 });
+    if (error || !data) {
+      return NextResponse.json({ error: error?.message || 'Failed to create supplier' }, { status: 500 });
+    }
+    supplier = data;
   }
 
   const onActive = async (wechatUserId: string) => {

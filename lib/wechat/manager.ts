@@ -76,26 +76,21 @@ export function startSupplierBot(
   return new Promise<BotSession>((resolve, reject) => {
     let resolved = false;
 
+    console.log(`[WeChatManager] Starting bot for supplier ${supplierId}...`);
     const bot = new WeChatBot({
-      storage: 'file',
-      storageDir: path.join(supplierStorageDir, 'creds.json'),
-      logLevel: 'info',
+      storageDir: `./.wechatbot/${supplierId}`,
       loginCallbacks: {
-        onQrUrl: (url: string) => {
-          console.log(`[WeChat][${supplierName}] QR URL received: ${url}`);
-          session.qrUrl = url;
-          session.status = 'pending_qr';
-          updateDbStatus(supplierId, 'pending_qr', url).catch(console.error);
+        onScan: async (url) => {
+          console.log(`[WeChatManager] QR Code received for ${supplierId}: ${url}`);
+          await updateDbStatus(supplierId, 'pending_qr', url);
         },
-        onScanned: () => {
-          console.log(`[WeChat][${supplierName}] QR Scanned, awaiting confirmation`);
-          session.status = 'scanned';
-          updateDbStatus(supplierId, 'scanned').catch(console.error);
+        onSuccess: async (user) => {
+          console.log(`[WeChatManager] Login success for ${supplierId}: ${user.name}`);
+          await updateDbStatus(supplierId, 'online', null, user.id);
         },
-        onExpired: () => {
-          console.log(`[WeChat][${supplierName}] QR Expired`);
-          session.status = 'expired';
-          updateDbStatus(supplierId, 'expired').catch(console.error);
+        onFailure: async (reason) => {
+          console.error(`[WeChatManager] Login failed for ${supplierId}: ${reason}`);
+          await updateDbStatus(supplierId, 'error');
         }
       }
     });

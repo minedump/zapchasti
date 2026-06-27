@@ -154,7 +154,25 @@ function SuppliersTab() {
     setGenerating(id);
     setQrCode(null);
     setActiveSupplierId(id);
-    setPollingId(id);
+    
+    try {
+      const res = await fetch('/api/wechat/qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ supplierId: id }),
+      });
+      
+      if (res.ok) {
+        setPollingId(id);
+      } else {
+        const err = await res.json();
+        console.error('Failed to start bot:', err.error);
+        setGenerating(null);
+      }
+    } catch (e) {
+      console.error('Error generating QR:', e);
+      setGenerating(null);
+    }
   }
 
   const sessionIcon = (status: SessionStatus) => {
