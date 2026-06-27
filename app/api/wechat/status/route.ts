@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+﻿﻿import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/service';
 
 export const runtime = 'nodejs';
@@ -22,6 +22,10 @@ export async function GET(req: NextRequest) {
       status: supplier?.session_status || 'inactive',
       qrUrl: supplier?.qr_url || null,
       wechatUserId: supplier?.wechat_user_id || null
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      }
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

@@ -1,4 +1,4 @@
-﻿import { WeChatBot } from '@wechatbot/wechatbot';
+﻿﻿﻿import { WeChatBot } from '@wechatbot/wechatbot';
 import path from 'path';
 import os from 'os';
 import { createServiceClient } from '../supabase/service';
@@ -35,7 +35,16 @@ export async function generateAndSaveQR(supplierId: string, supplierName: string
       storageDir: `./.wechatbot/temp_${supplierId}`,
       loginCallbacks: {
         onQrUrl: async (url: string) => {
-          console.log(`[WeChat] Got URL: ${url}`);
+          console.log(`[WeChat] SUCCESS (onQrUrl): Got URL: ${url}`);
+          clearTimeout(timeout);
+          await updateDbStatus(supplierId, 'pending_qr', url);
+          bot.stop();
+          resolve(url);
+        },
+        // @ts-ignore
+        qr: async (url: string) => {
+          console.log(`[WeChat] SUCCESS (qr): Got URL: ${url}`);
+          clearTimeout(timeout);
           await updateDbStatus(supplierId, 'pending_qr', url);
           bot.stop();
           resolve(url);
@@ -46,7 +55,7 @@ export async function generateAndSaveQR(supplierId: string, supplierName: string
     const timeout = setTimeout(() => {
       bot.stop();
       reject(new Error('Timeout getting QR from WeChat'));
-    }, 30000);
+    }, 60000);
 
     bot.login().catch(err => {
       clearTimeout(timeout);
