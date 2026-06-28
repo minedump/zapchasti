@@ -164,7 +164,8 @@ function SuppliersTab() {
       });
       
       if (res.ok) {
-        // Ничего не делаем, Realtime сам поймает изменения в БД
+        // На всякий случай обновим список через 2 секунды, если Realtime задержится
+        setTimeout(fetchSuppliers, 2000);
       } else {
         setGenerating(null);
       }

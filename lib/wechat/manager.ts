@@ -1,4 +1,4 @@
-﻿﻿import { WeChatBot } from '@wechatbot/wechatbot';
+﻿﻿﻿import { WeChatBot } from '@wechatbot/wechatbot';
 import { createServiceClient } from '../supabase/service';
 import fs from 'fs';
 import path from 'path';
@@ -44,9 +44,10 @@ export async function startSupplierBot(supplierId: string, supplierName: string)
         await updateDbStatus(supplierId, 'scanned');
       },
       onExpired: async () => {
-        console.log(`[WeChatManager] WARN: QR expired for ${supplierName}`);
-        await updateDbStatus(supplierId, 'expired');
-        activeBots.delete(supplierId);
+        console.log(`[WeChatManager] WARN: QR expired for ${supplierName}. Requesting new one...`);
+        await updateDbStatus(supplierId, 'expired', null);
+        // Перезапускаем логин для получения новой ссылки
+        bot.login().catch(e => console.error(`[WeChatManager] Retry login failed:`, e));
       }
     }
   });
