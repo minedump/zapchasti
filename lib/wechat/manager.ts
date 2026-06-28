@@ -1,136 +1,101 @@
-﻿﻿import { WeChatBot } from '@wechatbot/wechatbot';
+﻿import { WeChatBot } from '@wechatbot/wechatbot';
 import { createServiceClient } from '../supabase/service';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
+
+export interface BotSession {
+  supplierId: string;
+  supplierName: string;
+  bot: WeChatBot;
+  status: string;
+}
+
+// Реестр запущенных ботов
+const activeBots = (global as any).wechatBots || new Map<string, WeChatBot>();
+if (!(global as any).wechatBots) (global as any).wechatBots = activeBots;
 
 /**
- * Генерирует QR-ссылку для поставщика и сохраняет её в БД.
+ * Запускает инстанс бота для конкретного поставщика.
+ * Если бот уже запущен — возвращает его.
  */
-export async function generateAndSaveQR(supplierId: string, supplierName: string): Promise<string> {
-  console.log(`[WeChat] generateAndSaveQR called for ${supplierName}`);
-  
-  return new Promise((resolve, reject) => {
-    // Используем системную временную папку для надежности
-    const storageDir = path.join(os.tmpdir(), `wechat_temp_${supplierId}`);
-    if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
-
-    const bot = new WeChatBot({ storageDir });
-    const credPath = path.join(storageDir, 'credentials.json');
-
-    const checkInterval = setInterval(async () => {
-      if (fs.existsSync(credPath)) {
-        try {
-          const content = fs.readFileSync(credPath, 'utf8');
-          const creds = JSON.parse(content);
-          
-          if (creds && creds.token) {
-            console.log(`[WeChat] SUCCESS: Credentials found for ${supplierName}`);
-            clearInterval(checkInterval);
-            clearTimeout(timeout);
-            
-            await updateDbStatus(supplierId, 'active', null, creds.userId || creds.accountId, creds);
-            
-            bot.stop();
-            setTimeout(() => {
-              try {
-                if (fs.existsSync(storageDir)) fs.rmSync(storageDir, { recursive: true, force: true });
-              } catch (e) {}
-            }, 5000);
-          }
-        } catch (e) {}
-      }
-    }, 2000);
-
-    const timeout = setTimeout(() => {
-      clearInterval(checkInterval);
-      bot.stop();
-      reject(new Error('Timeout getting QR from WeChat'));
-    }, 120000);
-
-    const onQr = async (url: string) => {
-      console.log(`[WeChat] Got URL for ${supplierName}`);
-      await updateDbStatus(supplierId, 'pending_qr', url);
-      resolve(url);
-    };
-
-    bot.login({ 
-      // @ts-ignore
-      callbacks: { 
-        onQrUrl: onQr
-      } 
-    }).catch(err => {
-      clearInterval(checkInterval);
-      clearTimeout(timeout);
-      bot.stop();
-      reject(err);
-    });
-  });
-}
-
-const activeBots = new Map<string, WeChatBot>();
-
-export async function restoreSessionsFromDb() {
-  try {
-    const supabase = createServiceClient();
-    const { data: suppliers } = await supabase
-      .from('suppliers')
-      .select('*')
-      .eq('session_status', 'active')
-      .not('session_data', 'is', null);
-
-    if (!suppliers) return;
-
-    console.log(`[WeChat] Restoring ${suppliers.length} sessions...`);
-
-    for (const s of suppliers) {
-      await initBotInstance(s.id, s.name, s.session_data);
-    }
-  } catch (err) {
-    console.error(`[WeChat] Restore failed:`, err);
+export async function startSupplierBot(supplierId: string, supplierName: string) {
+  if (activeBots.has(supplierId)) {
+    console.log(`[WeChat] Bot for ${supplierName} already running`);
+    return activeBots.get(supplierId);
   }
-}
 
-async function initBotInstance(id: string, name: string, sessionData: any) {
-  const storageDir = `./.wechatbot/${id}`;
+  const storageDir = path.resolve(`./.wechatbot/${supplierId}`);
   if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
-  
-  fs.writeFileSync(
-    path.join(storageDir, 'credentials.json'), 
-    JSON.stringify(sessionData)
-  );
 
-  const bot = new WeChatBot({ storageDir });
-  
-  bot.onMessage(async (msg) => {
-    console.log(`[WeChat][${name}] Message from ${msg.userId}: ${msg.text}`);
-    await handleIncomingMessage(id, msg);
+  console.log(`[WeChat] Starting bot instance for ${supplierName}...`);
+
+  const bot = new WeChatBot({
+    storageDir,
+    loginCallbacks: {
+      onQrUrl: async (url) => {
+        console.log(`[WeChat] QR URL for ${supplierName}: ${url}`);
+        await updateDbStatus(supplierId, 'pending_qr', url);
+      },
+      onScanned: async () => {
+        console.log(`[WeChat] ${supplierName} scanned QR`);
+        await updateDbStatus(supplierId, 'scanned');
+      },
+      onExpired: async () => {
+        console.log(`[WeChat] QR expired for ${supplierName}`);
+        await updateDbStatus(supplierId, 'expired');
+        activeBots.delete(supplierId);
+      }
+    }
   });
 
-  bot.run().catch(err => console.error(`[WeChat][${name}] Run error:`, err));
-  activeBots.set(id, bot);
+  // События после успешного входа
+  bot.on('login', async (creds) => {
+    console.log(`[WeChat] ${supplierName} logged in successfully!`);
+    await updateDbStatus(supplierId, 'active', null, creds.userId || creds.accountId, creds);
+  });
+
+  bot.on('message', async (msg) => {
+    console.log(`[WeChat][${supplierName}] Message from ${msg.userId}: ${msg.text}`);
+    await handleIncomingMessage(supplierId, msg);
+  });
+
+  bot.on('error', (err) => {
+    console.error(`[WeChat][${supplierName}] Error:`, err);
+  });
+
+  // Запускаем цикл бота
+  bot.run().catch(err => {
+    console.error(`[WeChat][${supplierName}] Failed to run:`, err);
+    activeBots.delete(supplierId);
+  });
+
+  activeBots.set(supplierId, bot);
   return bot;
 }
 
-export async function sendToWeChat(supplierId: string, wechatUserId: string, text: string): Promise<void> {
-  let bot = activeBots.get(supplierId);
-  
-  if (!bot) {
-    const supabase = createServiceClient();
-    const { data: s } = await supabase
-      .from('suppliers')
-      .select('*')
-      .eq('id', supplierId)
-      .single();
+/**
+ * Генерирует QR (просто обертка над стартом бота)
+ */
+export async function generateAndSaveQR(supplierId: string, supplierName: string): Promise<string> {
+  await startSupplierBot(supplierId, supplierName);
+  return "Bot started, check DB for QR URL";
+}
 
-    if (s && s.session_data) {
-      bot = await initBotInstance(s.id, s.name, s.session_data);
-    } else {
-      throw new Error(`No active session for supplier ${supplierId}`);
-    }
+/**
+ * Инициализация всех активных ботов при старте сервера
+ */
+export async function restoreSessionsFromDb() {
+  const supabase = createServiceClient();
+  const { data: suppliers } = await supabase
+    .from('suppliers')
+    .select('*')
+    .eq('session_status', 'active');
+
+  if (!suppliers) return;
+
+  for (const s of suppliers) {
+    await startSupplierBot(s.id, s.name);
   }
-
-  await bot.send(wechatUserId, text);
 }
 
 async function handleIncomingMessage(supplierId: string, msg: any) {
@@ -155,27 +120,32 @@ async function handleIncomingMessage(supplierId: string, msg: any) {
       media_type: msg.type === 'image' ? 'photo' : 'none'
     });
   } catch (err) {
-    console.error(`[WeChat] Failed to handle message:`, err);
+    console.error(`[WeChat] Msg Handle Error:`, err);
   }
 }
 
 async function updateDbStatus(supplierId: string, status: string, qrUrl: string | null = null, wechatUserId: string | null = null, credentials: any = null) {
   try {
     const supabase = createServiceClient();
-    const updateData: any = {
-      session_status: status,
-      qr_url: qrUrl,
-      wechat_user_id: wechatUserId,
-      session_data: credentials
-    };
+    const updateData: any = { session_status: status };
+    if (qrUrl !== null) updateData.qr_url = qrUrl;
+    if (wechatUserId !== null) updateData.wechat_user_id = wechatUserId;
+    if (credentials !== null) updateData.session_data = credentials;
     
     await supabase.from('suppliers').update(updateData).eq('id', supplierId);
-    console.log(`[DB] Updated ${supplierId} to ${status}`);
   } catch (err) {
     console.error(`[DB Error]`, err);
   }
 }
 
-export async function startSupplierBot() {}
-export function getSession() { return undefined; }
-export function stopBot() {}
+export async function sendToWeChat(supplierId: string, wechatUserId: string, text: string) {
+  const bot = activeBots.get(supplierId);
+  if (!bot) throw new Error("Bot not running");
+  await bot.send(wechatUserId, text);
+}
+
+export function getSession(id: string) { return activeBots.get(id); }
+export function stopBot(id: string) {
+  const b = activeBots.get(id);
+  if (b) { b.stop(); activeBots.delete(id); }
+}

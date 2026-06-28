@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { generateAndSaveQR } from '../../../../lib/wechat/manager';
+import { startSupplierBot } from '@/lib/wechat/manager';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,7 +19,6 @@ export async function POST(req: NextRequest) {
     let targetName = supplierName || '';
 
     if (!targetId) {
-      // Создаем нового поставщика
       if (!supplierName) return NextResponse.json({ error: 'Supplier name is required' }, { status: 400 });
       
       const { data: newSupplier, error: createError } = await serviceSupabase
@@ -37,7 +36,6 @@ export async function POST(req: NextRequest) {
       targetId = newSupplier.id;
       targetName = newSupplier.name;
     } else {
-      // Ищем существующего
       const { data: existing } = await serviceSupabase
         .from('suppliers')
         .select('name')
@@ -48,9 +46,9 @@ export async function POST(req: NextRequest) {
       targetName = existing.name;
     }
 
-    // Запускаем процесс получения QR
+    // Запускаем бота (он сам обновит статус в БД через колбэки)
     if (targetId) {
-      generateAndSaveQR(targetId, targetName).catch(console.error);
+      startSupplierBot(targetId, targetName).catch(console.error);
     }
 
     return NextResponse.json({ success: true, supplierId: targetId });
