@@ -1,4 +1,4 @@
-﻿import { WeChatBot } from '@wechatbot/wechatbot';
+﻿﻿﻿import { WeChatBot } from '@wechatbot/wechatbot';
 import { createServiceClient } from '../supabase/service';
 import fs from 'fs';
 import path from 'path';
@@ -7,10 +7,11 @@ import path from 'path';
  * Генерирует QR-ссылку для поставщика и сохраняет её в БД.
  */
 export async function generateAndSaveQR(supplierId: string, supplierName: string): Promise<string> {
-  console.log(`[WeChat] Generating QR for ${supplierName}...`);
+  console.log(`[WeChat] generateAndSaveQR called for ${supplierName}`);
   
   return new Promise((resolve, reject) => {
-    const storageDir = path.resolve(`./.wechatbot/temp_${supplierId}`);
+    // Используем системную временную папку для надежности
+    const storageDir = path.join(os.tmpdir(), `wechat_temp_${supplierId}`);
     if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
 
     const bot = new WeChatBot({ storageDir });
@@ -54,7 +55,9 @@ export async function generateAndSaveQR(supplierId: string, supplierName: string
 
     bot.login({ 
       // @ts-ignore
-      callbacks: { onQrUrl: onQr } 
+      callbacks: { 
+        onQrUrl: onQr
+      } 
     }).catch(err => {
       clearInterval(checkInterval);
       clearTimeout(timeout);

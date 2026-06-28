@@ -11,23 +11,47 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const body = await req.json() as { supplierId: string };
-    const { supplierId } = body;
+    const body = await req.json() as { supplierId?: string; supplierName?: string; brands?: string[] };
+    const { supplierId, supplierName, brands } = body;
 
     const serviceSupabase = createServiceClient();
-    const { data: supplier } = await serviceSupabase
-      .from('suppliers')
-      .select('name')
-      .eq('id', supplierId)
-      .single();
+    let targetId = supplierId;
+    let targetName = supplierName || '';
 
-    if (!supplier) return NextResponse.json({ error: 'Supplier not found' }, { status: 404 });
+    if (!targetId) {
+      // Создаем нового поставщика
+      if (!supplierName) return NextResponse.json({ error: 'Supplier name is required' }, { status: 400 });
+      
+      const { data: newSupplier, error: createError } = await serviceSupabase
+        .from('suppliers')
+        .insert({
+          name: supplierName,
+          brands: (brands || []).map(b => b.toLowerCase()),
+          session_status: 'inactive'
+        })
+        .select()
+        .single();
 
-    // Запускаем процесс получения QR (он сам сохранит в БД)
-    // Мы не ждем завершения здесь, чтобы не вешать HTTP запрос
-    generateAndSaveQR(supplierId, supplier.name).catch(console.error);
+      if (createError || !newSupplier) throw new Error(createError?.message || 'Failed to create supplier');
+      
+      targetId = newSupplier.id;
+      targetName = newSupplier.name;
+    } else {
+      // Ищем существующего
+      const { data: existing } = await serviceSupabase
+        .from('suppliers')
+        .select('name')
+        .eq('id', targetId)
+        .single();
+      
+      if (!existing) return NextResponse.json({ error: 'Supplier not found' }, { status: 404 });
+      targetName = existing.name;
+    }
 
-    return NextResponse.json({ success: true });
+    // Запускаем процесс получения QR
+    generateAndSaveQR(targetId, targetName).catch(console.error);
+
+    return NextResponse.json({ success: true, supplierId: targetId });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
