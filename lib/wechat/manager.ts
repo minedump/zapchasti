@@ -1,15 +1,8 @@
-﻿﻿﻿﻿import { WeChatBot } from '@wechatbot/wechatbot';
+﻿import { WeChatBot } from '@wechatbot/wechatbot';
 import { createServiceClient } from '../supabase/service';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-
-export interface BotSession {
-  supplierId: string;
-  supplierName: string;
-  bot: WeChatBot;
-  status: string;
-}
 
 // Реестр запущенных ботов в глобальной области видимости для Next.js HMR
 const WECHAT_BOTS_KEY = Symbol.for('kodik.wechat.bots');
@@ -22,7 +15,6 @@ const activeBots: Map<string, WeChatBot> = (global as any)[WECHAT_BOTS_KEY];
  * Запускает инстанс бота для конкретного поставщика и возвращает QR-ссылку.
  */
 export async function startSupplierBot(supplierId: string, supplierName: string): Promise<string> {
-  // Если бот уже запущен и есть ссылка, можем вернуть её (но лучше запросить свежую)
   const existing = activeBots.get(supplierId);
   
   return new Promise((resolve, reject) => {
@@ -37,7 +29,7 @@ export async function startSupplierBot(supplierId: string, supplierName: string)
 
     const onQr = async (url: string) => {
       clearTimeout(timeout);
-      console.log(`[WeChatManager] QR URL ready: ${url}`);
+      console.log(`[WeChatManager] QR URL ready for ${supplierName}: ${url}`);
       await updateDbStatus(supplierId, 'pending_qr', url);
       resolve(url);
     };
@@ -52,77 +44,18 @@ export async function startSupplierBot(supplierId: string, supplierName: string)
 
     if (!existing) {
       bot.on('login', async (creds) => {
+        console.log(`[WeChatManager] ${supplierName} logged in!`);
         await updateDbStatus(supplierId, 'active', null, creds.userId || creds.accountId, creds);
       });
+      
       bot.on('message', async (msg) => {
         await handleIncomingMessage(supplierId, msg);
       });
+
       bot.start().catch(() => {});
       activeBots.set(supplierId, bot);
     }
   });
-}
-
-  const storageDir = path.join(os.tmpdir(), `wechatbot_${supplierId}`);
-  if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
-
-  console.log(`[WeChatManager] Starting bot for ${supplierName}. Storage: ${storageDir}`);
-
-  const bot = new WeChatBot({
-    storageDir,
-    loginCallbacks: {
-      onQrUrl: async (url) => {
-        console.log(`[WeChatManager] SUCCESS: QR URL for ${supplierName}: ${url}`);
-        await updateDbStatus(supplierId, 'pending_qr', url);
-      },
-      onScanned: async () => {
-        console.log(`[WeChatManager] INFO: ${supplierName} scanned QR`);
-        await updateDbStatus(supplierId, 'scanned');
-      },
-      onExpired: async () => {
-        console.log(`[WeChatManager] WARN: QR expired for ${supplierName}. Requesting new one...`);
-        await updateDbStatus(supplierId, 'expired', null);
-        // Перезапускаем логин для получения новой ссылки
-        bot.login().catch(e => console.error(`[WeChatManager] Retry login failed:`, e));
-      }
-    }
-  });
-
-  bot.on('login', async (creds) => {
-    console.log(`[WeChatManager] SUCCESS: ${supplierName} logged in!`);
-    await updateDbStatus(supplierId, 'active', null, creds.userId || creds.accountId, creds);
-  });
-
-  bot.on('message', async (msg) => {
-    await handleIncomingMessage(supplierId, msg);
-  });
-
-  bot.on('error', (err) => {
-    console.error(`[WeChatManager] ERROR for ${supplierName}:`, err);
-  });
-
-  bot.login({
-    // @ts-ignore
-    callbacks: {
-      onQrUrl: async (url: string) => {
-        console.log(`[WeChatManager] CALLBACK SUCCESS for ${supplierName}: ${url}`);
-        await updateDbStatus(supplierId, 'pending_qr', url);
-      },
-      onScanned: async () => {
-        console.log(`[WeChatManager] CALLBACK INFO: ${supplierName} scanned QR`);
-        await updateDbStatus(supplierId, 'scanned');
-      }
-    }
-  }).then(() => {
-    return bot.start();
-  }).catch(err => {
-    console.error(`[WeChatManager] CRITICAL: Failed to run bot for ${supplierName}:`, err);
-    activeBots.delete(supplierId);
-    updateDbStatus(supplierId, 'error');
-  });
-
-  activeBots.set(supplierId, bot);
-  return bot;
 }
 
 /**
@@ -142,7 +75,22 @@ export async function restoreSessionsFromDb() {
     console.log(`[WeChat] Restoring ${suppliers.length} sessions...`);
 
     for (const s of suppliers) {
-      await startSupplierBot(s.id, s.name);
+      const storageDir = path.join(os.tmpdir(), `wechatbot_${s.id}`);
+      if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
+      
+      fs.writeFileSync(
+        path.join(storageDir, 'credentials.json'), 
+        JSON.stringify(s.session_data)
+      );
+
+      const bot = new WeChatBot({ storageDir });
+      
+      bot.on('message', async (msg) => {
+        await handleIncomingMessage(s.id, msg);
+      });
+
+      bot.run().catch(err => console.error(`[WeChat][${s.name}] Failed to restore:`, err));
+      activeBots.set(s.id, bot);
     }
   } catch (err) {
     console.error(`[WeChat] Restore failed:`, err);
@@ -202,7 +150,6 @@ export function stopBot(id: string) {
   if (b) { b.stop(); activeBots.delete(id); }
 }
 
-// Заглушка для совместимости со старым кодом
 export async function generateAndSaveQR(supplierId: string, supplierName: string) {
   return startSupplierBot(supplierId, supplierName);
 }
