@@ -1,4 +1,4 @@
-﻿﻿import { WeChatBot } from '@wechatbot/wechatbot';
+﻿﻿﻿import { WeChatBot } from '@wechatbot/wechatbot';
 import { createServiceClient } from '../supabase/service';
 import fs from 'fs';
 import path from 'path';
@@ -155,6 +155,24 @@ export function getSession(id: string) { return activeBots.get(id); }
 export function stopBot(id: string) {
   const b = activeBots.get(id);
   if (b) { b.stop(); activeBots.delete(id); }
+}
+
+/**
+ * Полностью удаляет данные поставщика: останавливает бота и удаляет папку с кредитами.
+ */
+export async function deleteSupplierData(id: string) {
+  stopBot(id);
+  
+  const storageDir = path.join(os.tmpdir(), `wechatbot_${id}`);
+  const persistentDir = path.resolve(`./.wechatbot/${id}`);
+
+  try {
+    if (fs.existsSync(storageDir)) fs.rmSync(storageDir, { recursive: true, force: true });
+    if (fs.existsSync(persistentDir)) fs.rmSync(persistentDir, { recursive: true, force: true });
+    console.log(`[WeChatManager] Deleted storage for ${id}`);
+  } catch (e) {
+    console.error(`[WeChatManager] Failed to delete storage for ${id}:`, e);
+  }
 }
 
 export async function generateAndSaveQR(supplierId: string, supplierName: string) {

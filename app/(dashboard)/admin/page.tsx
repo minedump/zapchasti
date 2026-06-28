@@ -16,6 +16,7 @@ import {
   FileText,
   Key,
   QrCode,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/helpers';
 
@@ -173,6 +174,24 @@ function SuppliersTab() {
       }
     } catch (e) {
       setGenerating(null);
+    }
+  }
+
+  async function handleDeleteSupplier(id: string, name: string) {
+    if (!confirm(`Вы уверены, что хотите удалить поставщика ${name}? Это также удалит все его данные авторизации.`)) return;
+    
+    try {
+      const res = await fetch(`/api/admin/suppliers/${id}`, {
+        method: 'DELETE',
+      });
+      
+      if (res.ok) {
+        fetchSuppliers();
+      } else {
+        alert('Ошибка при удалении');
+      }
+    } catch (e) {
+      console.error(e);
     }
   }
 
@@ -337,21 +356,30 @@ function SuppliersTab() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button
-                      onClick={() => handleGenerateQR(s.id)}
-                      disabled={generating === s.id}
-                      className={cn(
-                        "p-2 rounded-lg transition-colors",
-                        generating === s.id ? "bg-gray-100 text-gray-400" : "hover:bg-blue-50 text-blue-600"
-                      )}
-                      title="Сгенерировать QR-код"
-                    >
-                      {generating === s.id ? (
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <QrCode className="w-4 h-4" />
-                      )}
-                    </button>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => handleGenerateQR(s.id)}
+                        disabled={generating === s.id}
+                        className={cn(
+                          "p-2 rounded-lg transition-colors",
+                          generating === s.id ? "bg-gray-100 text-gray-400" : "hover:bg-blue-50 text-blue-600"
+                        )}
+                        title="Сгенерировать QR-код"
+                      >
+                        {generating === s.id ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <QrCode className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteSupplier(s.id, s.name)}
+                        className="p-2 rounded-lg hover:bg-red-50 text-red-600 transition-colors"
+                        title="Удалить поставщика"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
