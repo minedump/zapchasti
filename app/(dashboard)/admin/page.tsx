@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils/helpers';
 
+import { createClient } from '@/lib/supabase/client';
+
 type AdminTab = 'suppliers' | 'template' | 'keys';
 
 export default function AdminPage() {
@@ -77,46 +79,47 @@ function SuppliersTab() {
   const [activeSupplierId, setActiveSupplierId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [generating, setGenerating] = useState<string | null>(null);
-  const [pollingId, setPollingId] = useState<string | null>(null);
 
-  // Polling for QR code or status changes
+  // Realtime subscription for QR code and status changes
   useEffect(() => {
-    if (!pollingId) return;
+    const supabase = createClient();
+    
+    const channel = supabase
+      .channel('suppliers-status')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'suppliers',
+        },
+        (payload) => {
+          const updatedSupplier = payload.new as DbSupplier;
+          
+          // Обновляем список поставщиков локально
+          setSuppliers(prev => prev.map(s => s.id === updatedSupplier.id ? updatedSupplier : s));
 
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/wechat/status?supplierId=${pollingId}`);
-        const json = await res.json() as { status: string; qrUrl: string | null };
-        
-        if (json.qrUrl) {
-          setQrCode(json.qrUrl);
-          setActiveSupplierId(pollingId);
-          // Не сбрасываем setGenerating(null), чтобы иконка крутилась до логина
+          // Если это тот поставщик, которого мы ждем
+          if (updatedSupplier.id === activeSupplierId) {
+            if (updatedSupplier.qr_url) {
+              setQrCode(updatedSupplier.qr_url);
+              setGenerating(null);
+            }
+
+            if (updatedSupplier.session_status === 'active' || updatedSupplier.session_status === 'online') {
+              setQrCode(null);
+              setGenerating(null);
+              setActiveSupplierId(null);
+            }
+          }
         }
+      )
+      .subscribe();
 
-        if (json.status === 'active' || json.status === 'online') {
-          setQrCode(null);
-          setPollingId(null);
-          setGenerating(null);
-          fetchSuppliers();
-        }
-
-        if (json.status === 'online' || json.status === 'active') {
-          setQrCode(null);
-          setPollingId(null);
-          fetchSuppliers();
-        }
-
-        if (json.status === 'error' || json.status === 'expired') {
-          setPollingId(null);
-        }
-      } catch (e) {
-        console.error('Polling error:', e);
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [pollingId]);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeSupplierId]);
 
   async function fetchSuppliers() {
     setLoading(true);
@@ -161,8 +164,7 @@ function SuppliersTab() {
       });
       
       if (res.ok) {
-        // 2. Начинаем опрашивать статус (БД)
-        setPollingId(id);
+        // Ничего не делаем, Realtime сам поймает изменения в БД
       } else {
         setGenerating(null);
       }
