@@ -193,9 +193,6 @@ function SuppliersTab() {
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-gray-900">Поставщики WeChat</h2>
         <div className="flex gap-2">
-          <button onClick={fetchSuppliers} className="p-2 hover:bg-gray-100 rounded-lg">
-            <RefreshCw className="w-4 h-4 text-gray-500" />
-          </button>
           <button
             onClick={() => setShowAdd(!showAdd)}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
@@ -255,7 +252,14 @@ function SuppliersTab() {
         <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 text-center animate-in fade-in slide-in-from-top-4">
           <div className="flex justify-between items-start mb-4">
             <h3 className="font-medium text-blue-900">QR-код для {suppliers.find(s => s.id === activeSupplierId)?.name}</h3>
-            <button onClick={() => setQrCode(null)} className="text-blue-400 hover:text-blue-600">
+            <button 
+              onClick={() => {
+                setQrCode(null);
+                setPollingId(null);
+                setGenerating(null);
+              }} 
+              className="text-blue-400 hover:text-blue-600"
+            >
               <XCircle className="w-5 h-5" />
             </button>
           </div>
