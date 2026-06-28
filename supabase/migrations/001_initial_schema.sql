@@ -37,6 +37,9 @@ CREATE POLICY "users_read_own" ON public.users
 CREATE POLICY "service_role_all" ON public.users
   USING (auth.role() = 'service_role');
 
+-- Enable Realtime for suppliers table
+ALTER PUBLICATION supabase_realtime ADD TABLE public.suppliers;
+
 -- ============================================================
 -- CHATS
 -- ============================================================
