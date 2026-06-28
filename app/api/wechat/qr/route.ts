@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { generateAndSaveQR } from '@/lib/wechat/manager';
+import { generateAndSaveQR } from '../../../../lib/wechat/manager';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -49,7 +49,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Запускаем процесс получения QR
-    generateAndSaveQR(targetId, targetName).catch(console.error);
+    if (targetId) {
+      generateAndSaveQR(targetId, targetName).catch(console.error);
+    }
 
     return NextResponse.json({ success: true, supplierId: targetId });
   } catch (err: any) {

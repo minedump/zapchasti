@@ -1,7 +1,8 @@
-﻿﻿﻿import { WeChatBot } from '@wechatbot/wechatbot';
+﻿﻿import { WeChatBot } from '@wechatbot/wechatbot';
 import { createServiceClient } from '../supabase/service';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 /**
  * Генерирует QR-ссылку для поставщика и сохраняет её в БД.
