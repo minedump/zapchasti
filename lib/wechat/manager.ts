@@ -10,15 +10,41 @@ export async function generateAndSaveQR(supplierId: string, supplierName: string
   console.log(`[WeChat] Generating QR for ${supplierName}...`);
   
   return new Promise((resolve, reject) => {
-    const storageDir = `./.wechatbot/temp_${supplierId}`;
-    const bot = new WeChatBot({
-      storageDir
-    });
+    const storageDir = path.resolve(`./.wechatbot/temp_${supplierId}`);
+    if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
+
+    const bot = new WeChatBot({ storageDir });
+    const credPath = path.join(storageDir, 'credentials.json');
+
+    const checkInterval = setInterval(async () => {
+      if (fs.existsSync(credPath)) {
+        try {
+          const content = fs.readFileSync(credPath, 'utf8');
+          const creds = JSON.parse(content);
+          
+          if (creds && creds.token) {
+            console.log(`[WeChat] SUCCESS: Credentials found for ${supplierName}`);
+            clearInterval(checkInterval);
+            clearTimeout(timeout);
+            
+            await updateDbStatus(supplierId, 'active', null, creds.userId || creds.accountId, creds);
+            
+            bot.stop();
+            setTimeout(() => {
+              try {
+                if (fs.existsSync(storageDir)) fs.rmSync(storageDir, { recursive: true, force: true });
+              } catch (e) {}
+            }, 5000);
+          }
+        } catch (e) {}
+      }
+    }, 2000);
 
     const timeout = setTimeout(() => {
+      clearInterval(checkInterval);
       bot.stop();
       reject(new Error('Timeout getting QR from WeChat'));
-    }, 60000);
+    }, 120000);
 
     const onQr = async (url: string) => {
       console.log(`[WeChat] Got URL for ${supplierName}`);
@@ -26,26 +52,11 @@ export async function generateAndSaveQR(supplierId: string, supplierName: string
       resolve(url);
     };
 
-    bot.on('login', async (creds) => {
-      console.log(`[WeChat] Login success for ${supplierName}`);
-      clearTimeout(timeout);
-      await updateDbStatus(supplierId, 'active', null, creds.userId, creds);
-      bot.stop();
-      try {
-        if (fs.existsSync(storageDir)) {
-          fs.rmSync(storageDir, { recursive: true, force: true });
-        }
-      } catch (e) {
-        console.error(`[WeChat] Failed to clean temp storage:`, e);
-      }
-    });
-
     bot.login({ 
       // @ts-ignore
-      callbacks: {
-        onQrUrl: onQr
-      } 
+      callbacks: { onQrUrl: onQr } 
     }).catch(err => {
+      clearInterval(checkInterval);
       clearTimeout(timeout);
       bot.stop();
       reject(err);
@@ -53,9 +64,8 @@ export async function generateAndSaveQR(supplierId: string, supplierName: string
   });
 }
 
-/**
- * Восстанавливает сессии всех активных поставщиков из БД.
- */
+const activeBots = new Map<string, WeChatBot>();
+
 export async function restoreSessionsFromDb() {
   try {
     const supabase = createServiceClient();
@@ -70,26 +80,53 @@ export async function restoreSessionsFromDb() {
     console.log(`[WeChat] Restoring ${suppliers.length} sessions...`);
 
     for (const s of suppliers) {
-      const storageDir = `./.wechatbot/${s.id}`;
-      if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
-      
-      fs.writeFileSync(
-        path.join(storageDir, 'credentials.json'), 
-        JSON.stringify(s.session_data)
-      );
-
-      const bot = new WeChatBot({ storageDir });
-      
-      bot.onMessage(async (msg) => {
-        console.log(`[WeChat][${s.name}] New message from ${msg.userId}: ${msg.text}`);
-        await handleIncomingMessage(s.id, msg);
-      });
-
-      bot.run().catch(err => console.error(`[WeChat][${s.name}] Failed to restore:`, err));
+      await initBotInstance(s.id, s.name, s.session_data);
     }
   } catch (err) {
     console.error(`[WeChat] Restore failed:`, err);
   }
+}
+
+async function initBotInstance(id: string, name: string, sessionData: any) {
+  const storageDir = `./.wechatbot/${id}`;
+  if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
+  
+  fs.writeFileSync(
+    path.join(storageDir, 'credentials.json'), 
+    JSON.stringify(sessionData)
+  );
+
+  const bot = new WeChatBot({ storageDir });
+  
+  bot.onMessage(async (msg) => {
+    console.log(`[WeChat][${name}] Message from ${msg.userId}: ${msg.text}`);
+    await handleIncomingMessage(id, msg);
+  });
+
+  bot.run().catch(err => console.error(`[WeChat][${name}] Run error:`, err));
+  activeBots.set(id, bot);
+  return bot;
+}
+
+export async function sendToWeChat(supplierId: string, wechatUserId: string, text: string): Promise<void> {
+  let bot = activeBots.get(supplierId);
+  
+  if (!bot) {
+    const supabase = createServiceClient();
+    const { data: s } = await supabase
+      .from('suppliers')
+      .select('*')
+      .eq('id', supplierId)
+      .single();
+
+    if (s && s.session_data) {
+      bot = await initBotInstance(s.id, s.name, s.session_data);
+    } else {
+      throw new Error(`No active session for supplier ${supplierId}`);
+    }
+  }
+
+  await bot.send(wechatUserId, text);
 }
 
 async function handleIncomingMessage(supplierId: string, msg: any) {
