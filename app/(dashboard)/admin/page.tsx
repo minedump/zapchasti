@@ -132,16 +132,13 @@ function SuppliersTab() {
     if (!newName.trim()) return;
     setAdding(true);
     const brands = newBrands.split(',').map((b) => b.trim()).filter(Boolean);
-    const res = await fetch('/api/wechat/qr', {
+    
+    // Теперь вызываем API только для создания, без запуска бота
+    const res = await fetch('/api/admin/suppliers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ supplierName: newName, brands }),
+      body: JSON.stringify({ name: newName, brands }),
     });
-    const json = await res.json() as { supplierId: string };
-    
-    if (json.supplierId) {
-      setPollingId(json.supplierId);
-    }
 
     setAdding(false);
     setNewName('');

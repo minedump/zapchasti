@@ -2,6 +2,7 @@
 import { createServiceClient } from '../supabase/service';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 export interface BotSession {
   supplierId: string;
@@ -16,57 +17,124 @@ if (!(global as any).wechatBots) (global as any).wechatBots = activeBots;
 
 /**
  * Запускает инстанс бота для конкретного поставщика.
- * Если бот уже запущен — возвращает его.
  */
 export async function startSupplierBot(supplierId: string, supplierName: string) {
   if (activeBots.has(supplierId)) {
-    console.log(`[WeChat] Bot for ${supplierName} already running`);
+    console.log(`[WeChatManager] Bot for ${supplierName} already running`);
     return activeBots.get(supplierId);
   }
 
-  const storageDir = path.resolve(`./.wechatbot/${supplierId}`);
+  // Используем системную временную папку для гарантии прав записи
+  const storageDir = path.join(os.tmpdir(), `wechatbot_${supplierId}`);
   if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
 
-  console.log(`[WeChat] Starting bot instance for ${supplierName}...`);
+  console.log(`[WeChatManager] Starting bot for ${supplierName}. Storage: ${storageDir}`);
 
   const bot = new WeChatBot({
     storageDir,
     loginCallbacks: {
       onQrUrl: async (url) => {
-        console.log(`[WeChat] QR URL for ${supplierName}: ${url}`);
+        console.log(`[WeChatManager] SUCCESS: QR URL for ${supplierName}: ${url}`);
         await updateDbStatus(supplierId, 'pending_qr', url);
       },
       onScanned: async () => {
-        console.log(`[WeChat] ${supplierName} scanned QR`);
+        console.log(`[WeChatManager] INFO: ${supplierName} scanned QR`);
         await updateDbStatus(supplierId, 'scanned');
       },
       onExpired: async () => {
-        console.log(`[WeChat] QR expired for ${supplierName}`);
+        console.log(`[WeChatManager] WARN: QR expired for ${supplierName}`);
         await updateDbStatus(supplierId, 'expired');
         activeBots.delete(supplierId);
       }
     }
   });
 
-  // События после успешного входа
   bot.on('login', async (creds) => {
-    console.log(`[WeChat] ${supplierName} logged in successfully!`);
+    console.log(`[WeChatManager] SUCCESS: ${supplierName} logged in!`);
     await updateDbStatus(supplierId, 'active', null, creds.userId || creds.accountId, creds);
   });
 
   bot.on('message', async (msg) => {
-    console.log(`[WeChat][${supplierName}] Message from ${msg.userId}: ${msg.text}`);
     await handleIncomingMessage(supplierId, msg);
   });
 
   bot.on('error', (err) => {
-    console.error(`[WeChat][${supplierName}] Error:`, err);
+    console.error(`[WeChatManager] ERROR for ${supplierName}:`, err);
   });
 
-  // Запускаем цикл бота
-  bot.run().catch(err => {
-    console.error(`[WeChat][${supplierName}] Failed to run:`, err);
+  // Запускаем через login(), так как нам нужен именно процесс авторизации
+  bot.login().then(() => {
+    console.log(`[WeChatManager] Bot.login() promise resolved for ${supplierName}`);
+    return bot.start();
+  }).catch(err => {
+    console.error(`[WeChatManager] CRITICAL: Failed to run bot for ${supplierName}:`, err);
     activeBots.delete(supplierId);
+    updateDbStatus(supplierId, 'error');
+  });
+
+  activeBots.set(supplierId, bot);
+  return bot;
+}
+
+// Реестр запущенных ботов
+const activeBots = (global as any).wechatBots || new Map<string, WeChatBot>();
+if (!(global as any).wechatBots) (global as any).wechatBots = activeBots;
+
+/**
+ * Запускает инстанс бота для конкретного поставщика.
+ */
+export async function startSupplierBot(supplierId: string, supplierName: string) {
+  if (activeBots.has(supplierId)) {
+    console.log(`[WeChatManager] Bot for ${supplierName} already running`);
+    return activeBots.get(supplierId);
+  }
+
+  // Используем системную временную папку для гарантии прав записи
+  const storageDir = path.join(os.tmpdir(), `wechatbot_${supplierId}`);
+  if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
+
+  console.log(`[WeChatManager] Starting bot for ${supplierName}. Storage: ${storageDir}`);
+
+  const bot = new WeChatBot({
+    storageDir,
+    loginCallbacks: {
+      onQrUrl: async (url) => {
+        console.log(`[WeChatManager] SUCCESS: QR URL for ${supplierName}: ${url}`);
+        await updateDbStatus(supplierId, 'pending_qr', url);
+      },
+      onScanned: async () => {
+        console.log(`[WeChatManager] INFO: ${supplierName} scanned QR`);
+        await updateDbStatus(supplierId, 'scanned');
+      },
+      onExpired: async () => {
+        console.log(`[WeChatManager] WARN: QR expired for ${supplierName}`);
+        await updateDbStatus(supplierId, 'expired');
+        activeBots.delete(supplierId);
+      }
+    }
+  });
+
+  bot.on('login', async (creds) => {
+    console.log(`[WeChatManager] SUCCESS: ${supplierName} logged in!`);
+    await updateDbStatus(supplierId, 'active', null, creds.userId || creds.accountId, creds);
+  });
+
+  bot.on('message', async (msg) => {
+    await handleIncomingMessage(supplierId, msg);
+  });
+
+  bot.on('error', (err) => {
+    console.error(`[WeChatManager] ERROR for ${supplierName}:`, err);
+  });
+
+  // Запускаем через login(), так как нам нужен именно процесс авторизации
+  bot.login().then(() => {
+    console.log(`[WeChatManager] Bot.login() promise resolved for ${supplierName}`);
+    return bot.start();
+  }).catch(err => {
+    console.error(`[WeChatManager] CRITICAL: Failed to run bot for ${supplierName}:`, err);
+    activeBots.delete(supplierId);
+    updateDbStatus(supplierId, 'error');
   });
 
   activeBots.set(supplierId, bot);
