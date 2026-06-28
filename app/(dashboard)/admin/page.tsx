@@ -87,7 +87,7 @@ function SuppliersTab() {
 
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/wechat/status?supplierId=${pollingId}`);
+        const res = await fetch(`/api/wechat/status?supplierId=${pollingId}&t=${Date.now()}`);
         const json = await res.json() as { status: string; qrUrl: string | null };
         
         // 1. Если статус стал активным — всё успешно
