@@ -1,4 +1,4 @@
-﻿﻿﻿import { WeChatBot } from '@wechatbot/wechatbot';
+﻿﻿﻿﻿import { WeChatBot } from '@wechatbot/wechatbot';
 import { createServiceClient } from '../supabase/service';
 import fs from 'fs';
 import path from 'path';
@@ -19,13 +19,49 @@ if (!(global as any)[WECHAT_BOTS_KEY]) {
 const activeBots: Map<string, WeChatBot> = (global as any)[WECHAT_BOTS_KEY];
 
 /**
- * Запускает инстанс бота для конкретного поставщика.
+ * Запускает инстанс бота для конкретного поставщика и возвращает QR-ссылку.
  */
-export async function startSupplierBot(supplierId: string, supplierName: string) {
-  if (activeBots.has(supplierId)) {
-    console.log(`[WeChatManager] Bot for ${supplierName} already running`);
-    return activeBots.get(supplierId);
-  }
+export async function startSupplierBot(supplierId: string, supplierName: string): Promise<string> {
+  // Если бот уже запущен и есть ссылка, можем вернуть её (но лучше запросить свежую)
+  const existing = activeBots.get(supplierId);
+  
+  return new Promise((resolve, reject) => {
+    const storageDir = path.join(os.tmpdir(), `wechatbot_${supplierId}`);
+    if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
+
+    const bot = existing || new WeChatBot({ storageDir });
+
+    const timeout = setTimeout(() => {
+      reject(new Error('Timeout waiting for QR from WeChat'));
+    }, 45000);
+
+    const onQr = async (url: string) => {
+      clearTimeout(timeout);
+      console.log(`[WeChatManager] QR URL ready: ${url}`);
+      await updateDbStatus(supplierId, 'pending_qr', url);
+      resolve(url);
+    };
+
+    bot.login({
+      // @ts-ignore
+      callbacks: { onQrUrl: onQr }
+    }).catch(err => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+
+    if (!existing) {
+      bot.on('login', async (creds) => {
+        await updateDbStatus(supplierId, 'active', null, creds.userId || creds.accountId, creds);
+      });
+      bot.on('message', async (msg) => {
+        await handleIncomingMessage(supplierId, msg);
+      });
+      bot.start().catch(() => {});
+      activeBots.set(supplierId, bot);
+    }
+  });
+}
 
   const storageDir = path.join(os.tmpdir(), `wechatbot_${supplierId}`);
   if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });

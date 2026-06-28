@@ -163,9 +163,10 @@ function SuppliersTab() {
         body: JSON.stringify({ supplierId: id }),
       });
       
-      if (res.ok) {
-        // На всякий случай обновим список через 2 секунды, если Realtime задержится
-        setTimeout(fetchSuppliers, 2000);
+      const json = await res.json();
+      if (res.ok && json.qrUrl) {
+        setQrCode(json.qrUrl);
+        setGenerating(null);
       } else {
         setGenerating(null);
       }

@@ -46,9 +46,10 @@ export async function POST(req: NextRequest) {
       targetName = existing.name;
     }
 
-    // Запускаем бота (он сам обновит статус в БД через колбэки)
+    // Запускаем бота и ЖДЕМ ссылку
     if (targetId) {
-      startSupplierBot(targetId, targetName).catch(console.error);
+      const qrUrl = await startSupplierBot(targetId, targetName);
+      return NextResponse.json({ success: true, supplierId: targetId, qrUrl });
     }
 
     return NextResponse.json({ success: true, supplierId: targetId });
