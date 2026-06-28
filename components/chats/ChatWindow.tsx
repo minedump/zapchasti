@@ -38,15 +38,19 @@ export default function ChatWindow({ chat }: ChatWindowProps) {
   }, [chat.id]);
 
   const fetchDeal = useCallback(async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('deals')
       .select('id, deal_number, status')
       .or(`client_chat_id.eq.${chat.id},supplier_chat_id.eq.${chat.id}`)
       .not('status', 'in', '(closed,rejected)')
       .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
-    setDeal(data as DbDeal | null);
+      .limit(1);
+    
+    if (data && data.length > 0) {
+      setDeal(data[0] as DbDeal);
+    } else {
+      setDeal(null);
+    }
   }, [chat.id, supabase]);
 
   useEffect(() => {
