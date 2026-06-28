@@ -1,4 +1,4 @@
-﻿import { WeChatBot } from '@wechatbot/wechatbot';
+﻿﻿import { WeChatBot } from '@wechatbot/wechatbot';
 import { createServiceClient } from '../supabase/service';
 import fs from 'fs';
 import path from 'path';
@@ -64,7 +64,19 @@ export async function startSupplierBot(supplierId: string, supplierName: string)
     console.error(`[WeChatManager] ERROR for ${supplierName}:`, err);
   });
 
-  bot.login().then(() => {
+  bot.login({
+    // @ts-ignore
+    callbacks: {
+      onQrUrl: async (url: string) => {
+        console.log(`[WeChatManager] CALLBACK SUCCESS for ${supplierName}: ${url}`);
+        await updateDbStatus(supplierId, 'pending_qr', url);
+      },
+      onScanned: async () => {
+        console.log(`[WeChatManager] CALLBACK INFO: ${supplierName} scanned QR`);
+        await updateDbStatus(supplierId, 'scanned');
+      }
+    }
+  }).then(() => {
     return bot.start();
   }).catch(err => {
     console.error(`[WeChatManager] CRITICAL: Failed to run bot for ${supplierName}:`, err);
