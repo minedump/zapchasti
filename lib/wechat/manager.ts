@@ -1,4 +1,4 @@
-﻿import { WeChatBot } from '@wechatbot/wechatbot';
+﻿﻿import { WeChatBot } from '@wechatbot/wechatbot';
 import { createServiceClient } from '../supabase/service';
 import fs from 'fs';
 import path from 'path';
@@ -36,7 +36,14 @@ export async function startSupplierBot(supplierId: string, supplierName: string)
 
     bot.login({
       // @ts-ignore
-      callbacks: { onQrUrl: onQr }
+      callbacks: { 
+        onQrUrl: onQr,
+        onExpired: async () => {
+          console.log(`[WeChatManager] QR expired for ${supplierName}`);
+          await updateDbStatus(supplierId, 'expired', null);
+          activeBots.delete(supplierId);
+        }
+      }
     }).catch(err => {
       clearTimeout(timeout);
       reject(err);

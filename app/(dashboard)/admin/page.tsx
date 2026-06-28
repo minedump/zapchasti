@@ -79,47 +79,47 @@ function SuppliersTab() {
   const [activeSupplierId, setActiveSupplierId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [generating, setGenerating] = useState<string | null>(null);
+  const [pollingId, setPollingId] = useState<string | null>(null);
 
-  // Realtime subscription for QR code and status changes
+  // Polling for status changes when QR is active
   useEffect(() => {
-    const supabase = createClient();
-    
-    const channel = supabase
-      .channel('suppliers-status')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'suppliers',
-        },
-        (payload) => {
-          const updatedSupplier = payload.new as DbSupplier;
-          
-          // Обновляем список поставщиков локально
-          setSuppliers(prev => prev.map(s => s.id === updatedSupplier.id ? updatedSupplier : s));
+    if (!pollingId) return;
 
-          // Если это тот поставщик, которого мы ждем
-          if (updatedSupplier.id === activeSupplierId) {
-            if (updatedSupplier.qr_url) {
-              setQrCode(updatedSupplier.qr_url);
-              setGenerating(null);
-            }
-
-            if (updatedSupplier.session_status === 'active' || updatedSupplier.session_status === 'online') {
-              setQrCode(null);
-              setGenerating(null);
-              setActiveSupplierId(null);
-            }
-          }
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/wechat/status?supplierId=${pollingId}`);
+        const json = await res.json() as { status: string; qrUrl: string | null };
+        
+        // 1. Если статус стал активным — всё успешно
+        if (json.status === 'active' || json.status === 'online') {
+          setQrCode(null);
+          setPollingId(null);
+          setGenerating(null);
+          fetchSuppliers();
+          return;
         }
-      )
-      .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [activeSupplierId]);
+        // 2. Если ссылка просрочена
+        if (json.status === 'expired') {
+          setQrCode(null);
+          setPollingId(null);
+          setGenerating(null);
+          fetchSuppliers();
+          return;
+        }
+
+        // 3. Если статус изменился на "отсканировано"
+        if (json.status === 'scanned') {
+          // Можно добавить локальное состояние для текста подсказки
+          fetchSuppliers();
+        }
+      } catch (e) {
+        console.error('Polling error:', e);
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [pollingId]);
 
   async function fetchSuppliers() {
     setLoading(true);
@@ -167,6 +167,7 @@ function SuppliersTab() {
       if (res.ok && json.qrUrl) {
         setQrCode(json.qrUrl);
         setGenerating(null);
+        setPollingId(id); // Запускаем опрос
       } else {
         setGenerating(null);
       }
